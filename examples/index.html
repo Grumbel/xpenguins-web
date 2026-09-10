@@ -73,7 +73,7 @@
     .world {
       position: relative;
       width: 100%;
-      height: 36rem;
+      height: 28rem;
       margin-bottom: 2rem;
     }
 
@@ -95,91 +95,95 @@
       opacity: 0.9;
     }
 
-    /* --- Level 1 (high): three runways separated by two climbable towers --- */
+    /*
+      Pyramid: narrow at the top, wider each level down.
+      Side towers sit on the mid runways so walkers still hit climbable faces.
+    */
+
+    /* Apex — narrowest */
+    .run-l1-mid {
+      left: 42vw; top: 0.6rem;
+      width: 16vw; height: 3.2rem;
+      background: #fffef6;
+      border-top: 3px solid #e07a5f;
+    }
+
+    /* Upper shoulders — still relatively narrow, with towers between / beside */
     .run-l1-left {
-      left: 1vw; top: 3.5rem;
-      width: 28vw; height: 3.6rem; /* overlaps Tower A so walkers hit the face before falling off */
+      left: 28vw; top: 5.2rem;
+      width: 14vw; height: 3.4rem;
       background: #fffef6;
       border-top: 3px solid #e07a5f;
     }
     .tower-a {
-      left: 27vw; top: 0.5rem;
-      width: 8vw; height: 14rem;
+      left: 40vw; top: 2.2rem;
+      width: 6vw; height: 11rem;
       background: #3d5a80;
       color: #eef4ff;
       border-top: 3px solid #1b2a40;
     }
-    .run-l1-mid {
-      left: 33vw; top: 3.5rem;
-      width: 31vw; height: 3.6rem; /* overlaps both towers */
+    .run-l1-right {
+      left: 58vw; top: 5.2rem;
+      width: 14vw; height: 3.4rem;
       background: #fffef6;
       border-top: 3px solid #e07a5f;
     }
     .tower-b {
-      left: 62vw; top: 0.5rem;
-      width: 8vw; height: 14rem;
+      left: 54vw; top: 2.2rem;
+      width: 6vw; height: 11rem;
       background: #5c4d7a;
       color: #f3edff;
       border-top: 3px solid #2d2440;
     }
-    .run-l1-right {
-      left: 68vw; top: 3.5rem;
-      width: 31vw; height: 3.6rem;
-      background: #fffef6;
-      border-top: 3px solid #e07a5f;
-    }
 
-    /* --- Level 2: mid shelves under the towers (landing / climb bases) --- */
+    /* Mid band — wider, centered */
     .run-l2-left {
-      left: 4vw; top: 13rem;
-      width: 22vw; height: 3.4rem;
+      left: 18vw; top: 12.5rem;
+      width: 18vw; height: 3.4rem;
       background: #e8f7ee;
       border-top: 3px solid #2a9d8f;
     }
     .run-l2-center {
-      left: 32vw; top: 13rem;
-      width: 36vw; height: 3.4rem; /* stub-wall sits on this path */
+      left: 34vw; top: 12.5rem;
+      width: 32vw; height: 3.4rem;
       background: #e8f7ee;
       border-top: 3px solid #2a9d8f;
     }
-    .run-l2-right {
-      left: 72vw; top: 13rem;
-      width: 24vw; height: 3.4rem;
-      background: #e8f7ee;
-      border-top: 3px solid #2a9d8f;
-    }
-
-    /* Short wall sitting on L2 center — forces a climb mid-path */
     .stub-wall {
-      left: 48vw; top: 8.5rem;
+      left: 47.5vw; top: 8rem;
       width: 5vw; height: 7.2rem;
       background: #ee6c4d;
       color: #fff8f5;
       border-top: 3px solid #9b3b28;
     }
+    .run-l2-right {
+      left: 64vw; top: 12.5rem;
+      width: 18vw; height: 3.4rem;
+      background: #e8f7ee;
+      border-top: 3px solid #2a9d8f;
+    }
 
-    /* --- Level 3: low wide decks spanning the width --- */
+    /* Base — widest */
     .run-l3-left {
-      left: 2vw; top: 22rem;
-      width: 40vw; height: 3.8rem;
+      left: 2vw; top: 20.5rem;
+      width: 44vw; height: 3.8rem;
       background: #dceaf7;
       border-top: 3px solid #457b9d;
     }
     .run-l3-right {
-      left: 48vw; top: 22rem;
-      width: 50vw; height: 3.8rem;
+      left: 54vw; top: 20.5rem;
+      width: 44vw; height: 3.8rem;
       background: #dceaf7;
       border-top: 3px solid #457b9d;
     }
-    /* Gap 40–48vw between L3 decks → tumble through */
-
-    /* Far-right high perch */
+    /* small side perches on the base tier corners */
     .perch {
-      left: 88vw; top: 17.5rem;
-      width: 10vw; height: 3rem;
+      left: 46vw; top: 16.5rem;
+      width: 8vw; height: 3rem;
       background: #f0e6ff;
       border-top: 3px solid #9b5de5;
     }
+
 
     aside.panel {
       position: fixed;
@@ -227,62 +231,65 @@
   </div>
 
   <p class="hint">
-    Full-width course with towers to <strong>climb</strong> and gaps to <strong>tumble</strong>. Drag penguins with the mouse (press–move–release). Enable <strong>Squish</strong> to pop them with a click (no drag). Toolbar stays above the overlay so Squish can be turned off.
+    Pyramid of shelves — <strong>narrow apex</strong>, wider tiers below, broad base. Towers and a stub wall for <strong>climbs</strong>; gaps for <strong>tumbles</strong>. Drag penguins (press–move–release); Squish = click without dragging.
   </p>
 
   <div class="world" aria-label="Penguin playground">
     <!-- Level 1 -->
+    <!-- Apex -->
+    <div class="box run-l1-mid">
+      <h2>Apex</h2>
+      <p>Narrow top.</p>
+    </div>
+
+    <!-- Upper shoulders + towers -->
     <div class="box run-l1-left">
-      <h2>West runway</h2>
-      <p>Walk right → climb Tower A.</p>
+      <h2>Shoulder</h2>
+      <p>Into Tower A.</p>
     </div>
     <div class="box tower-a">
       <h2>Tower A</h2>
       <p>Climb</p>
-    </div>
-    <div class="box run-l1-mid">
-      <h2>Center runway</h2>
-      <p>Between the towers.</p>
     </div>
     <div class="box tower-b">
       <h2>Tower B</h2>
       <p>Climb</p>
     </div>
     <div class="box run-l1-right">
-      <h2>East runway</h2>
-      <p>Right side of the screen.</p>
+      <h2>Shoulder</h2>
+      <p>Into Tower B.</p>
     </div>
 
-    <!-- Level 2 -->
+    <!-- Mid band -->
     <div class="box run-l2-left">
-      <h2>West mid</h2>
-      <p>Landing under Tower A.</p>
+      <h2>Mid west</h2>
+      <p>Wider tier.</p>
     </div>
     <div class="box run-l2-center">
-      <h2>Center mid</h2>
-      <p>Long walk — stub wall blocks the middle.</p>
+      <h2>Mid center</h2>
+      <p>Stub wall on the path.</p>
     </div>
     <div class="box stub-wall">
       <h2>Wall</h2>
       <p>Climb</p>
     </div>
     <div class="box run-l2-right">
-      <h2>East mid</h2>
-      <p>Under Tower B.</p>
+      <h2>Mid east</h2>
+      <p>Wider tier.</p>
     </div>
 
-    <!-- Level 3 -->
+    <!-- Base -->
     <div class="box run-l3-left">
-      <h2>Low west</h2>
-      <p>Wide deck; gap on the right.</p>
-    </div>
-    <div class="box run-l3-right">
-      <h2>Low east</h2>
-      <p>Spans to the far right.</p>
+      <h2>Base west</h2>
+      <p>Widest level; gap in the middle.</p>
     </div>
     <div class="box perch">
-      <h2>Perch</h2>
-      <p>High right.</p>
+      <h2>Step</h2>
+      <p>Between tiers.</p>
+    </div>
+    <div class="box run-l3-right">
+      <h2>Base east</h2>
+      <p>Widest level.</p>
     </div>
   </div>
 
