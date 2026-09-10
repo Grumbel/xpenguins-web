@@ -40,7 +40,7 @@
       flex-wrap: wrap;
       gap: 0.45rem;
       justify-content: center;
-      margin: 0.75rem auto;
+      margin: 0.75rem auto 1.75rem;
       width: min(48rem, 94vw);
     }
     button {
@@ -69,7 +69,7 @@
       min-width: 6rem;
     }
     .bookmarklet-row {
-      margin: 0 auto 0.75rem;
+      margin: 0 auto 1.5rem;
       width: min(40rem, 92vw);
       padding: 0.65rem 0.9rem;
       background: #fff8e7;
@@ -97,7 +97,7 @@
     }
 
     .hint {
-      margin: 0 auto 0.75rem;
+      margin: 0 auto 1rem;
       width: min(40rem, 92vw);
       padding: 0.55rem 0.9rem;
       font-size: 0.88rem;
@@ -116,8 +116,12 @@
       position: relative;
       width: 100%;
       flex: 1 0 auto;
-      min-height: 32rem;
+      min-height: 34rem;
+      margin-top: 1.25rem;
       margin-bottom: 1rem;
+      /* Clear air below chrome so fallers/walkers don’t treat the
+         toolbar/hint as adjacent ledges to the apex. */
+      padding-top: 2.5rem;
     }
 
     .box {
@@ -140,7 +144,7 @@
 
     /* Apex — narrowest */
     .run-l1-mid {
-      left: 40vw; top: 0.5rem;
+      left: 40vw; top: 1rem;
       width: 20vw; min-height: 5rem;
       background: #fffef6;
       border-top: 4px solid #e07a5f;
@@ -259,7 +263,7 @@
     <p>Penguins walk on DOM boxes the way classic xpenguins walked on windows.</p>
   </header>
 
-  <div class="toolbar">
+  <div class="toolbar" data-xpenguins-ignore>
     <button class="primary" type="button" id="btn-start">Start</button>
     <button type="button" id="btn-stop">Stop</button>
     <button type="button" id="btn-more">More</button>
@@ -268,7 +272,7 @@
     <button type="button" id="btn-squish" aria-pressed="false">Squish: off</button>
   </div>
 
-  <p class="hint">
+  <p class="hint" data-xpenguins-ignore>
     Pyramid of shelves (narrow top, wide base). Towers to <strong>climb</strong>, gaps to <strong>tumble</strong>. Walkers sometimes stop to <strong>read</strong> (or dig). Drag with the mouse; Squish = click without dragging.
   </p>
 
