@@ -237,7 +237,8 @@ function stop() {
       drawAll();
       const dying = toons.some(
         (t) => t.type === Type.EXIT || t.type === Type.ANGEL ||
-          t.type === Type.SPLAT || t.type === Type.EXPLOSION,
+          t.type === Type.SPLAT || t.type === Type.EXPLOSION ||
+          t.type === Type.ZAPPED,
       );
       if (frames < 48 && dying) {
         setTimeout(finish, theme.delay || 60);

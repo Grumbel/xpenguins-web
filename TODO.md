@@ -55,7 +55,40 @@
 - [x] Walker step-up attempt before turn/climb
 - [x] Example uses `setSquish`; build exports new API
 
+
+## Done (animation + zapped)
+
+- [x] Sprite frame advances every physics tick (was every 2nd → walk cycle half speed)
+- [x] `cycle` counter for action loops (classic `loop` ≥ 0)
+- [x] Theme `zapped` type; click-squish uses zapped when blood on
+
+## Gap vs xpenguins-ng (still missing / partial)
+
+**Present (web):** faller, walker, tumbler, climber, floater, exit, angel, splat,
+explosion, action, zapped; dual genera (normal + skateboarder); blood/angels;
+DOM solids + floor; squish; reduced-motion; observers.
+
+**Missing or weak:**
+
+| Feature | Notes |
+|---------|--------|
+| Runner type | Classic faster walker; theme has no runner pixmap |
+| Squashed | Window mapped on top of toon (`TOON_HERE`); no direct DOM analogue |
+| Multi-action 0–5 | Only single `action` (reader / digger) |
+| Theme cycle | ng tray cycles theme packs; web is one embedded pack |
+| Extra themes | Big Penguins, Turtles, Bill, Classic_Penguins not ported |
+| Window association | Toons stick to moving windows; we only re-sample solids |
+| Step-up / partial move | Simplified; no pixel-wise ToonAdvance |
+| Edge block modes | ng `TOON_EDGEBLOCK` / side-bottom flags |
+| Pause | ng can pause the frame loop |
+| Config number per genus | weights approximate; no exact `number` quotas |
+| conf flags | `NOCYCLE`, `INVULNERABLE`, `NOBLOCK` not modeled |
+| pref_direction / pref_climb | tumble-off memory for climb preference |
+
+**N/A on web:** X11 tray, root/overlay drawing modes, XShape, signals.
+
 ## Next
+
 
 - [ ] Additional themes (Big Penguins, Turtles, …) as selectable packs
 - [ ] npm publish / CDN example

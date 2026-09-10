@@ -22,6 +22,7 @@ export const Type = {
   SPLAT: 'splat',
   EXPLOSION: 'explosion',
   ACTION: 'action',
+  ZAPPED: 'zapped',
 };
 
 function rand(n) {
@@ -73,7 +74,7 @@ export function createToon(vw, theme, genus) {
     vy: fall.speed,
     dir,
     frame: 0,
-    frameAcc: 0,
+    cycle: 0,
     climbSide: 0,
     terminating: false,
   };
@@ -88,7 +89,7 @@ function setType(t, type, theme, keepDir) {
   t.type = type;
   const def = typeDef(theme, t.genus, type);
   t.frame = 0;
-  t.frameAcc = 0;
+  t.cycle = 0;
   const dirs = def.directions || 1;
   t.dir = ((t.dir | 0) % dirs + dirs) % dirs;
 
@@ -136,15 +137,20 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   const w = def.width;
   const h = def.height;
 
-  t.frameAcc += 1;
-  const frameDelay = 2;
-  if (t.frameAcc >= frameDelay) {
-    t.frameAcc = 0;
-    t.frame = (t.frame + 1) % Math.max(1, def.frames);
+  /* Classic ToonAdvance: one sprite frame per physics tick when active. */
+  {
+    const nframes = Math.max(1, def.frames | 0);
+    t.frame += 1;
+    if (t.frame >= nframes) {
+      t.frame = 0;
+      t.cycle = (t.cycle | 0) + 1;
+    }
   }
 
-  if (t.type === Type.EXIT || t.type === Type.SPLAT || t.type === Type.EXPLOSION) {
-    if (t.frame >= def.frames - 1 && t.frameAcc === 0) {
+  if (t.type === Type.EXIT || t.type === Type.SPLAT || t.type === Type.EXPLOSION ||
+      t.type === Type.ZAPPED) {
+    /* Finished a non-looping death strip once (cycle flipped after last frame). */
+    if (t.cycle >= 1) {
       const hasAngel = !!typeDef(theme, t.genus, Type.ANGEL);
       if (opts.angels !== false && hasAngel) {
         setType(t, Type.ANGEL, theme, true);
@@ -163,8 +169,10 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   }
 
   if (t.type === Type.ACTION) {
-    const loop = def.loop || -4;
-    if (loop < 0 && rand(-loop) === 0) {
+    const loop = def.loop != null ? def.loop : -4;
+    if (loop < 0) {
+      if (rand(-loop) === 0) setType(t, Type.WALKER, theme, true);
+    } else if ((t.cycle | 0) >= loop) {
       setType(t, Type.WALKER, theme, true);
     }
     const support = findSupport(solids, t.x, t.y, w, h, 5);
@@ -303,9 +311,16 @@ export function terminateToon(t, theme) {
 export function squishToon(t, theme, opts) {
   if (!t.active || t.terminating) return;
   if (t.type === Type.EXIT || t.type === Type.ANGEL ||
-      t.type === Type.SPLAT || t.type === Type.EXPLOSION) return;
-  if (opts && opts.blood === false) setType(t, Type.EXPLOSION, theme, true);
-  else setType(t, Type.SPLAT, theme, true);
+      t.type === Type.SPLAT || t.type === Type.EXPLOSION ||
+      t.type === Type.ZAPPED) return;
+  /* Classic: mouse hit → zapped when blood on, else explosion. */
+  if (opts && opts.blood === false) {
+    setType(t, Type.EXPLOSION, theme, true);
+  } else {
+    const z = t.genus && t.genus.types && t.genus.types[Type.ZAPPED];
+    if (z) setType(t, Type.ZAPPED, theme, true);
+    else setType(t, Type.SPLAT, theme, true);
+  }
 }
 
 export function hitToon(t, theme, px, py) {
