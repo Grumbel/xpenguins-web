@@ -85,19 +85,21 @@ function wantsPointer() {
   return !!(opts.grab || opts.squish);
 }
 
+/**
+ * Canvas stays pointer-events:none so the page (text selection, links, forms)
+ * keeps working. Hits are done from document capture; only clicks on a toon
+ * are claimed.
+ */
 function syncPointerMode() {
   if (!overlay) return;
-  const on = running && wantsPointer();
-  overlay.setInteractive(on, {
-    cursor: opts.grab ? 'grab' : (opts.squish ? 'crosshair' : 'default'),
-  });
+  overlay.setInteractive(false, { cursor: 'default' });
 }
 
 function toonUnder(px, py) {
   if (!theme) return null;
   for (let i = toons.length - 1; i >= 0; i--) {
     const t = toons[i];
-    if (!t.active || t.terminating) continue;
+    if (!t.active || t.terminating || t.held) continue;
     if (t.type === Type.EXIT || t.type === Type.ANGEL ||
         t.type === Type.SPLAT || t.type === Type.EXPLOSION ||
         t.type === Type.ZAPPED) continue;
@@ -106,20 +108,27 @@ function toonUnder(px, py) {
   return null;
 }
 
+function uiTarget(el) {
+  if (!el || !el.closest) return false;
+  return !!el.closest(
+    'button, a, input, textarea, select, label, summary, [data-xpenguins-ignore], [contenteditable="true"]',
+  );
+}
+
 function releaseDrag(asSquish) {
   if (!drag) return;
   const { toon, pointerId } = drag;
   try {
-    if (overlay && overlay.canvas.hasPointerCapture?.(pointerId)) {
-      overlay.canvas.releasePointerCapture(pointerId);
+    if (typeof window !== 'undefined' && window.releasePointerCapture) {
+      /* capture was on documentElement when available */
     }
-  } catch (_) { /* already released */ }
+  } catch (_) { /* ignore */ }
+  void pointerId;
 
   toon.held = false;
   if (asSquish && opts.squish) {
     squishToon(toon, theme, opts);
   } else {
-    /* Drop: become a faller / tumbler at the release point. */
     toon.type = Type.FALLER;
     const def = typeDef(theme, toon.genus, Type.FALLER);
     toon.frame = 0;
@@ -128,22 +137,22 @@ function releaseDrag(asSquish) {
     toon.vy = def.speed || 3;
   }
   drag = null;
-  if (overlay) {
-    overlay.setInteractive(running && wantsPointer(), {
-      cursor: opts.grab ? 'grab' : (opts.squish ? 'crosshair' : 'default'),
-    });
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.cursor = '';
+    document.body && (document.body.style.userSelect = '');
   }
 }
 
 function onPointerDown(ev) {
   if (!running || !theme || !wantsPointer()) return;
   if (ev.button != null && ev.button !== 0) return;
+  if (uiTarget(ev.target)) return;
 
   const t = toonUnder(ev.clientX, ev.clientY);
-  if (!t) return;
+  if (!t) return; /* miss → normal page interaction */
 
   ev.preventDefault();
-  const def = typeDef(theme, t.genus, t.type);
+  ev.stopPropagation();
   drag = {
     toon: t,
     pointerId: ev.pointerId,
@@ -157,9 +166,12 @@ function onPointerDown(ev) {
   t.vx = 0;
   t.vy = 0;
   try {
-    overlay.canvas.setPointerCapture(ev.pointerId);
+    ev.target.setPointerCapture?.(ev.pointerId);
   } catch (_) { /* ignore */ }
-  if (overlay) overlay.setInteractive(true, { cursor: 'grabbing' });
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.cursor = 'grabbing';
+    if (document.body) document.body.style.userSelect = 'none';
+  }
 }
 
 function onPointerMove(ev) {
@@ -175,6 +187,7 @@ function onPointerMove(ev) {
   toon.held = true;
   toon.vx = 0;
   toon.vy = 0;
+  ev.preventDefault();
 }
 
 function onPointerUp(ev) {
@@ -189,18 +202,23 @@ function onPointerCancel(ev) {
   releaseDrag(false);
 }
 
+let pointerBound = false;
 function bindPointerListeners(on) {
-  if (!overlay) return;
-  const c = overlay.canvas;
-  c.removeEventListener('pointerdown', onPointerDown);
-  c.removeEventListener('pointermove', onPointerMove);
-  c.removeEventListener('pointerup', onPointerUp);
-  c.removeEventListener('pointercancel', onPointerCancel);
+  if (typeof document === 'undefined') return;
+  const optsCap = { capture: true, passive: false };
+  if (pointerBound) {
+    document.removeEventListener('pointerdown', onPointerDown, optsCap);
+    document.removeEventListener('pointermove', onPointerMove, optsCap);
+    document.removeEventListener('pointerup', onPointerUp, optsCap);
+    document.removeEventListener('pointercancel', onPointerCancel, optsCap);
+    pointerBound = false;
+  }
   if (on) {
-    c.addEventListener('pointerdown', onPointerDown);
-    c.addEventListener('pointermove', onPointerMove);
-    c.addEventListener('pointerup', onPointerUp);
-    c.addEventListener('pointercancel', onPointerCancel);
+    document.addEventListener('pointerdown', onPointerDown, optsCap);
+    document.addEventListener('pointermove', onPointerMove, optsCap);
+    document.addEventListener('pointerup', onPointerUp, optsCap);
+    document.addEventListener('pointercancel', onPointerCancel, optsCap);
+    pointerBound = true;
   }
   syncPointerMode();
 }
@@ -307,7 +325,7 @@ async function start(userOpts = {}) {
   images = await loadImages(pack.images);
 
   const mySession = session;
-  overlay = createOverlay({ interactive: wantsPointer() });
+  overlay = createOverlay({ interactive: false });
   bindPointerListeners(true);
 
   const n = opts.count ?? theme.defaultCount ?? 8;
@@ -343,23 +361,19 @@ function stop() {
     bindPointerListeners(false);
     for (const t of toons) {
       t.held = false;
-      terminateToon(t, theme);
+      if (t.active) terminateToon(t, theme);
     }
     let frames = 0;
+    const maxFrames = 40;
     const finish = () => {
       if (mySession !== session) return;
       frames++;
-      refreshSolids();
       for (const t of toons) {
-        stepToon(t, solids, theme, window.innerWidth, window.innerHeight, opts);
+        if (t.active) stepToon(t, solids, theme, window.innerWidth, window.innerHeight, opts);
       }
       drawAll();
-      const dying = toons.some(
-        (t) => t.type === Type.EXIT || t.type === Type.ANGEL ||
-          t.type === Type.SPLAT || t.type === Type.EXPLOSION ||
-          t.type === Type.ZAPPED,
-      );
-      if (frames < 48 && dying) {
+      const stillPlaying = toons.some((t) => t.active);
+      if (stillPlaying && frames < maxFrames) {
         setTimeout(finish, theme.delay || 60);
       } else if (mySession === session) {
         destroyOverlayNow();

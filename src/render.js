@@ -1,9 +1,8 @@
 /**
  * Full-viewport canvas overlay.
  *
- * z-index is high but below typical “page chrome” that sets
- * z-index: 2147483647 so toolbars can still receive clicks while the
- * overlay is interactive (squish / grab).
+ * Always pointer-events:none — hit-testing is done from document listeners
+ * so text selection and page UI keep working. Drawing still covers the viewport.
  */
 
 export function createOverlay(opts = {}) {
@@ -18,9 +17,9 @@ export function createOverlay(opts = {}) {
     'width:100vw',
     'height:100vh',
     'z-index:2147483645',
-    interactive ? 'pointer-events:auto' : 'pointer-events:none',
+    'pointer-events:none',
     'image-rendering:pixelated',
-    'cursor:' + (interactive ? 'grab' : 'default'),
+    'cursor:' + ('default'),
   ].join(';');
   document.documentElement.appendChild(canvas);
   const ctx = canvas.getContext('2d');
@@ -36,9 +35,10 @@ export function createOverlay(opts = {}) {
     canvas,
     ctx,
     resize,
-    setInteractive(on, style = {}) {
-      canvas.style.pointerEvents = on ? 'auto' : 'none';
-      canvas.style.cursor = style.cursor || (on ? 'grab' : 'default');
+    setInteractive(_on, style = {}) {
+      /* Canvas never captures pointers; page stays usable. */
+      canvas.style.pointerEvents = 'none';
+      canvas.style.cursor = style.cursor || 'default';
     },
     destroy() {
       window.removeEventListener('resize', resize);

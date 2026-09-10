@@ -17,17 +17,21 @@
       background: linear-gradient(180deg, #9ec5e8 0%, #cfe0f5 45%, #e8eef6 100%);
     }
 
-    /* Full-width banner, inset so top is a real ledge (minTop ≈ 12px) */
+    /* Slim title strip (still a ledge if top ≥ minTop) */
     .banner {
-      margin: 16px 2vw 0;
-      padding: 0.9rem 1.25rem;
+      margin: 14px 2vw 0;
+      padding: 0.35rem 0.85rem;
       background: var(--accent);
       color: #fff;
-      border-radius: 10px;
-      box-shadow: 0 6px 16px rgba(30, 58, 95, 0.3);
+      border-radius: 8px;
+      box-shadow: 0 3px 10px rgba(30, 58, 95, 0.25);
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
-    .banner h1 { margin: 0 0 0.25rem; font-size: 1.35rem; }
-    .banner p { margin: 0; font-size: 0.92rem; opacity: 0.92; }
+    .banner h1 { margin: 0; font-size: 1rem; font-weight: 650; }
+    .banner p { margin: 0; font-size: 0.8rem; opacity: 0.88; }
 
     .toolbar {
       position: relative;
@@ -55,11 +59,18 @@
       color: #fff;
       border-color: #c0392b;
     }
+    .count-label {
+      align-self: center;
+      font-size: 0.85rem;
+      color: #345;
+      padding: 0 0.35rem;
+      min-width: 5.5rem;
+    }
 
     .hint {
-      margin: 0 2vw 0.75rem;
-      padding: 0.55rem 0.9rem;
-      font-size: 0.88rem;
+      margin: 0 2vw 0.5rem;
+      padding: 0.35rem 0.7rem;
+      font-size: 0.8rem;
       color: #234;
       background: rgba(255, 255, 255, 0.55);
       border: 1px dashed #7a9;
@@ -225,9 +236,10 @@
   <div class="toolbar">
     <button class="primary" type="button" id="btn-start">Start</button>
     <button type="button" id="btn-stop">Stop</button>
-    <button type="button" id="btn-more">More penguins</button>
+    <button type="button" id="btn-more">More</button>
     <button type="button" id="btn-less">Fewer</button>
-    <button type="button" id="btn-squish" aria-pressed="false">Toggle squish</button>
+    <span class="count-label" id="lbl-count" aria-live="polite">Penguins: 16</span>
+    <button type="button" id="btn-squish" aria-pressed="false">Squish: off</button>
   </div>
 
   <p class="hint">
@@ -317,27 +329,37 @@
         }
         const count = { n: 16 };
         let squish = false;
+        const lbl = document.getElementById('lbl-count');
+        function showCount() {
+          lbl.textContent = 'Penguins: ' + count.n;
+        }
         document.getElementById('btn-start').onclick = function () {
-          XPenguins.start({ count: count.n, squish: squish });
+          XPenguins.start({ count: count.n, squish: squish, grab: true });
+          showCount();
         };
-        document.getElementById('btn-stop').onclick = function () { XPenguins.stop(); };
+        document.getElementById('btn-stop').onclick = function () {
+          XPenguins.stop();
+        };
         document.getElementById('btn-more').onclick = function () {
           count.n += 4;
+          showCount();
           if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
         };
         document.getElementById('btn-less').onclick = function () {
           count.n = Math.max(0, count.n - 4);
+          showCount();
           if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
         };
         document.getElementById('btn-squish').onclick = function () {
           squish = !squish;
-          this.textContent = squish ? 'Squish: on' : 'Toggle squish';
+          this.textContent = squish ? 'Squish: on' : 'Squish: off';
           this.setAttribute('aria-pressed', squish ? 'true' : 'false');
           if (XPenguins.isRunning() && typeof XPenguins.setSquish === 'function') {
             XPenguins.setSquish(squish);
           }
         };
-        XPenguins.start({ count: count.n, squish: squish });
+        showCount();
+        XPenguins.start({ count: count.n, squish: squish, grab: true });
       }
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', boot);

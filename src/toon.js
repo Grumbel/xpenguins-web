@@ -152,7 +152,12 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
       t.type === Type.ZAPPED) {
     /* Finished a non-looping death strip once (cycle flipped after last frame). */
     if (t.cycle >= 1) {
-      const hasAngel = !!typeDef(theme, t.genus, Type.ANGEL);
+      /* stop()/terminate: play once, then deactivate — never respawn. */
+      if (t.terminating) {
+        t.active = false;
+        return;
+      }
+      const hasAngel = !!(t.genus && t.genus.types && t.genus.types[Type.ANGEL]);
       if (opts.angels !== false && hasAngel) {
         setType(t, Type.ANGEL, theme, true);
       } else {
@@ -165,7 +170,10 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   if (t.type === Type.ANGEL) {
     t.x += t.vx;
     t.y += t.vy;
-    if (t.y + h < -10) Object.assign(t, createToon(vw, theme));
+    if (t.y + h < -10) {
+      if (t.terminating) t.active = false;
+      else Object.assign(t, createToon(vw, theme));
+    }
     return;
   }
 
