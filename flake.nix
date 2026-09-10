@@ -39,9 +39,14 @@
             '';
           };
 
-        toApp = drv: name: {
+        /*
+          Flake apps: `nix flake show` reads meta.description when present
+          (Nix ≥ 2.19 / recent nixpkgs). Keep type+program for older clients.
+        */
+        toApp = drv: name: description: {
           type = "app";
           program = "${drv}/bin/${name}";
+          meta = { inherit description; };
         };
 
         scriptServe = mkScript "xpenguins-web-serve" ''
@@ -91,11 +96,16 @@
         };
 
         apps = {
-          default = toApp scriptServe "xpenguins-web-serve";
-          serve = toApp scriptServe "xpenguins-web-serve";
-          demo = toApp scriptDemo "xpenguins-web-demo";
-          build = toApp scriptBuild "xpenguins-web-build";
-          test = toApp scriptTest "xpenguins-web-test";
+          default = toApp scriptServe "xpenguins-web-serve"
+            "Serve the demo (build dist if missing) on http://127.0.0.1:8765";
+          serve = toApp scriptServe "xpenguins-web-serve"
+            "Serve the demo (build dist if missing) on http://127.0.0.1:8765";
+          demo = toApp scriptDemo "xpenguins-web-demo"
+            "Force-rebuild the bundle, then serve the playground demo";
+          build = toApp scriptBuild "xpenguins-web-build"
+            "Build dist/xpenguins-web.js with embedded theme sprites";
+          test = toApp scriptTest "xpenguins-web-test"
+            "Run geometry, ledge-scoring, and genus unit tests";
         };
 
         devShells.default = pkgs.mkShell {
