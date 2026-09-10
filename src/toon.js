@@ -8,7 +8,7 @@
  */
 
 import {
-  findSupport, blockedSide, hitCeiling, landOnLedge, canStepUp,
+  findSupport, blockedSide, hitCeiling, landOnLedge, canStepUp, wallBeside,
 } from './solids.js';
 
 export const Type = {
@@ -259,12 +259,21 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
           return;
         }
       }
+      /*
+       * Tall wall (extends well above this ledge) → almost always climb.
+       * Short face → turn / float / occasional climb (classic mix).
+       */
+      const tallWall = block.y < support.y - 12;
+      const canClimb = !!typeDef(theme, t.genus, Type.CLIMBER);
       const r = rand(8);
-      if (r < 2 && typeDef(theme, t.genus, Type.CLIMBER)) {
+      const wantClimb = canClimb && (tallWall ? r < 7 : r < 3);
+      if (wantClimb) {
         t.climbSide = side;
         setType(t, Type.CLIMBER, theme, true);
         t.x = side > 0 ? block.x - w : block.x + block.w;
-      } else if (r < 3 && typeDef(theme, t.genus, Type.FLOATER)) {
+        t.vx = 0;
+        t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+      } else if (r < 5 && typeDef(theme, t.genus, Type.FLOATER)) {
         t.dir = 1 - t.dir;
         setType(t, Type.FLOATER, theme, true);
       } else {
@@ -275,8 +284,17 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
     }
     const cx = t.x + w / 2;
     if (cx < support.x + 2 || cx > support.x + support.w - 2) {
-      if (rand(2) === 0) setType(t, Type.TUMBLER, theme, true);
-      else {
+      /* About to walk off: climb if a wall face is ahead, else tumble/turn */
+      const edgeBlock = blockedSide(solids, t.x, t.y, w, h, side);
+      if (edgeBlock && typeDef(theme, t.genus, Type.CLIMBER)) {
+        t.climbSide = side;
+        setType(t, Type.CLIMBER, theme, true);
+        t.x = side > 0 ? edgeBlock.x - w : edgeBlock.x + edgeBlock.w;
+        t.vx = 0;
+        t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+      } else if (rand(2) === 0) {
+        setType(t, Type.TUMBLER, theme, true);
+      } else {
         t.dir = 1 - t.dir;
         t.vx = dirSign(t.dir) * def.speed;
       }
@@ -286,16 +304,23 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
 
   if (t.type === Type.CLIMBER) {
     const side = t.climbSide || dirSign(t.dir);
-    const block = blockedSide(solids, t.x - side * 2, t.y, w, h, side);
-    if (!block) {
+    /*
+     * Stick to the wall face while climbing. wallBeside keeps contact until
+     * the feet clear the top — blockedSide(midY) used to fail early and
+     * turn the climb into an instant fall.
+     */
+    const wall = wallBeside(solids, t.x, t.y, w, h, side);
+    if (!wall) {
       setType(t, Type.FALLER, theme, true);
       return;
     }
-    t.x = side > 0 ? block.x - w : block.x + block.w;
-    if (t.y + h <= block.y + 2) {
-      t.y = block.y - h;
+    t.x = side > 0 ? wall.x - w : wall.x + wall.w;
+    /* Feet reached the top ledge → walk away from the face. */
+    if (t.y + h <= wall.y + 3) {
+      t.y = wall.y - h;
       t.dir = side > 0 ? 1 : 0;
       setType(t, Type.WALKER, theme, true);
+      t.x += side > 0 ? 2 : -2;
       return;
     }
     if (t.y < -h) Object.assign(t, createToon(vw, theme));

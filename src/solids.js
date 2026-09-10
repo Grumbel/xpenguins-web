@@ -205,15 +205,23 @@ export function hitCeiling(solids, x, y, w, h) {
   return null;
 }
 
-/** Horizontal block in walk direction. dir > 0 probes right face. */
+/**
+ * Horizontal block in walk direction.
+ * True when the toon's leading edge has reached or entered the solid face
+ * (not only a 4px-thin band — walkers used to skip past the face in one step).
+ */
 export function blockedSide(solids, x, y, w, h, dir) {
-  const probeX = dir > 0 ? x + w + 1 : x - 1;
   const midY = y + h * 0.5;
+  const lead = dir > 0 ? x + w : x;
   for (const s of solids) {
     if (s.floor) continue;
     if (midY < s.y || midY > s.y + s.h) continue;
-    if (dir > 0 && probeX >= s.x && probeX <= s.x + 4) return s;
-    if (dir < 0 && probeX <= s.x + s.w && probeX >= s.x + s.w - 4) return s;
+    if (dir > 0) {
+      /* Walking right: leading edge at/past left face, body not fully past solid */
+      if (lead >= s.x - 1 && x < s.x + s.w) return s;
+    } else {
+      if (lead <= s.x + s.w + 1 && x + w > s.x) return s;
+    }
   }
   return null;
 }
@@ -228,4 +236,36 @@ export function canStepUp(solids, x, y, w, h, dir, rise = 8) {
   if (blockedSide(solids, nx, ny, w, h, dir)) return false;
   /* Still need something under the new feet, or empty air is ok for one step */
   return true;
+}
+
+/**
+ * Vertical wall face still beside the toon for climbing.
+ * Unlike blockedSide (mid-body probe), this keeps a grip while any of the
+ * body still overlaps the solid in Y — so climbers are not dropped the
+ * instant their midpoint passes the top edge.
+ *
+ * @param {number} side  +1 = wall on the right, -1 = wall on the left
+ * @returns {object|null} solid being climbed
+ */
+export function wallBeside(solids, x, y, w, h, side, grip = 4) {
+  const probeX = side > 0 ? x + w + 1 : x - 1;
+  const bodyTop = y;
+  const bodyBot = y + h;
+  let best = null;
+  for (const s of solids) {
+    if (s.floor) continue;
+    /* Horizontal contact with the near face */
+    let faceHit = false;
+    if (side > 0) {
+      faceHit = probeX >= s.x - 1 && probeX <= s.x + grip;
+    } else {
+      faceHit = probeX <= s.x + s.w + 1 && probeX >= s.x + s.w - grip;
+    }
+    if (!faceHit) continue;
+    /* Vertical overlap: feet still at or below top, head not fully below bottom */
+    if (bodyBot < s.y - 2) continue; /* already above the wall */
+    if (bodyTop > s.y + s.h) continue; /* fully below the wall */
+    if (!best || s.y < best.y) best = s; /* prefer higher top when overlapping */
+  }
+  return best;
 }

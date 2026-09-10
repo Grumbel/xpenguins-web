@@ -209,15 +209,23 @@ function hitCeiling(solids, x, y, w, h) {
   return null;
 }
 
-/** Horizontal block in walk direction. dir > 0 probes right face. */
+/**
+ * Horizontal block in walk direction.
+ * True when the toon's leading edge has reached or entered the solid face
+ * (not only a 4px-thin band — walkers used to skip past the face in one step).
+ */
 function blockedSide(solids, x, y, w, h, dir) {
-  const probeX = dir > 0 ? x + w + 1 : x - 1;
   const midY = y + h * 0.5;
+  const lead = dir > 0 ? x + w : x;
   for (const s of solids) {
     if (s.floor) continue;
     if (midY < s.y || midY > s.y + s.h) continue;
-    if (dir > 0 && probeX >= s.x && probeX <= s.x + 4) return s;
-    if (dir < 0 && probeX <= s.x + s.w && probeX >= s.x + s.w - 4) return s;
+    if (dir > 0) {
+      /* Walking right: leading edge at/past left face, body not fully past solid */
+      if (lead >= s.x - 1 && x < s.x + s.w) return s;
+    } else {
+      if (lead <= s.x + s.w + 1 && x + w > s.x) return s;
+    }
   }
   return null;
 }
@@ -232,6 +240,38 @@ function canStepUp(solids, x, y, w, h, dir, rise = 8) {
   if (blockedSide(solids, nx, ny, w, h, dir)) return false;
   /* Still need something under the new feet, or empty air is ok for one step */
   return true;
+}
+
+/**
+ * Vertical wall face still beside the toon for climbing.
+ * Unlike blockedSide (mid-body probe), this keeps a grip while any of the
+ * body still overlaps the solid in Y — so climbers are not dropped the
+ * instant their midpoint passes the top edge.
+ *
+ * @param {number} side  +1 = wall on the right, -1 = wall on the left
+ * @returns {object|null} solid being climbed
+ */
+function wallBeside(solids, x, y, w, h, side, grip = 4) {
+  const probeX = side > 0 ? x + w + 1 : x - 1;
+  const bodyTop = y;
+  const bodyBot = y + h;
+  let best = null;
+  for (const s of solids) {
+    if (s.floor) continue;
+    /* Horizontal contact with the near face */
+    let faceHit = false;
+    if (side > 0) {
+      faceHit = probeX >= s.x - 1 && probeX <= s.x + grip;
+    } else {
+      faceHit = probeX <= s.x + s.w + 1 && probeX >= s.x + s.w - grip;
+    }
+    if (!faceHit) continue;
+    /* Vertical overlap: feet still at or below top, head not fully below bottom */
+    if (bodyBot < s.y - 2) continue; /* already above the wall */
+    if (bodyTop > s.y + s.h) continue; /* fully below the wall */
+    if (!best || s.y < best.y) best = s; /* prefer higher top when overlapping */
+  }
+  return best;
 }
 
 /**
@@ -492,12 +532,21 @@ function stepToon(t, solids, theme, vw, vh, opts) {
           return;
         }
       }
+      /*
+       * Tall wall (extends well above this ledge) → almost always climb.
+       * Short face → turn / float / occasional climb (classic mix).
+       */
+      const tallWall = block.y < support.y - 12;
+      const canClimb = !!typeDef(theme, t.genus, Type.CLIMBER);
       const r = rand(8);
-      if (r < 2 && typeDef(theme, t.genus, Type.CLIMBER)) {
+      const wantClimb = canClimb && (tallWall ? r < 7 : r < 3);
+      if (wantClimb) {
         t.climbSide = side;
         setType(t, Type.CLIMBER, theme, true);
         t.x = side > 0 ? block.x - w : block.x + block.w;
-      } else if (r < 3 && typeDef(theme, t.genus, Type.FLOATER)) {
+        t.vx = 0;
+        t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+      } else if (r < 5 && typeDef(theme, t.genus, Type.FLOATER)) {
         t.dir = 1 - t.dir;
         setType(t, Type.FLOATER, theme, true);
       } else {
@@ -508,8 +557,17 @@ function stepToon(t, solids, theme, vw, vh, opts) {
     }
     const cx = t.x + w / 2;
     if (cx < support.x + 2 || cx > support.x + support.w - 2) {
-      if (rand(2) === 0) setType(t, Type.TUMBLER, theme, true);
-      else {
+      /* About to walk off: climb if a wall face is ahead, else tumble/turn */
+      const edgeBlock = blockedSide(solids, t.x, t.y, w, h, side);
+      if (edgeBlock && typeDef(theme, t.genus, Type.CLIMBER)) {
+        t.climbSide = side;
+        setType(t, Type.CLIMBER, theme, true);
+        t.x = side > 0 ? edgeBlock.x - w : edgeBlock.x + edgeBlock.w;
+        t.vx = 0;
+        t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+      } else if (rand(2) === 0) {
+        setType(t, Type.TUMBLER, theme, true);
+      } else {
         t.dir = 1 - t.dir;
         t.vx = dirSign(t.dir) * def.speed;
       }
@@ -519,16 +577,23 @@ function stepToon(t, solids, theme, vw, vh, opts) {
 
   if (t.type === Type.CLIMBER) {
     const side = t.climbSide || dirSign(t.dir);
-    const block = blockedSide(solids, t.x - side * 2, t.y, w, h, side);
-    if (!block) {
+    /*
+     * Stick to the wall face while climbing. wallBeside keeps contact until
+     * the feet clear the top — blockedSide(midY) used to fail early and
+     * turn the climb into an instant fall.
+     */
+    const wall = wallBeside(solids, t.x, t.y, w, h, side);
+    if (!wall) {
       setType(t, Type.FALLER, theme, true);
       return;
     }
-    t.x = side > 0 ? block.x - w : block.x + block.w;
-    if (t.y + h <= block.y + 2) {
-      t.y = block.y - h;
+    t.x = side > 0 ? wall.x - w : wall.x + wall.w;
+    /* Feet reached the top ledge → walk away from the face. */
+    if (t.y + h <= wall.y + 3) {
+      t.y = wall.y - h;
       t.dir = side > 0 ? 1 : 0;
       setType(t, Type.WALKER, theme, true);
+      t.x += side > 0 ? 2 : -2;
       return;
     }
     if (t.y < -h) Object.assign(t, createToon(vw, theme));
