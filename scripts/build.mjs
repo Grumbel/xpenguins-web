@@ -73,8 +73,9 @@ const EMBEDDED = __XPENGUINS_EMBEDDED__;
 ${index}
 const XPenguins = { start, stop, setNumber, isRunning, collectSolids };
 global.XPenguins = XPenguins;
+if (typeof global.window !== 'undefined') global.window.XPenguins = XPenguins;
 if (typeof module !== 'undefined' && module.exports) module.exports = XPenguins;
-})(typeof window !== 'undefined' ? window : globalThis);
+})(typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : this));
 `;
 
 fs.mkdirSync(distDir, { recursive: true });

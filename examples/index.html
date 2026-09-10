@@ -66,32 +66,48 @@
     <p>Footer shelf — classic “bottom of the screen” is always a floor too.</p>
   </footer>
 
-  <!-- Production: single embedded bundle -->
+  <!-- Bundle path absolute for scripts/serve.mjs; use ../dist/ for file:// -->
   <script src="../dist/xpenguins-web.js"></script>
   <script>
-    const count = { n: 10 };
-    document.getElementById('btn-start').onclick = () => {
-      XPenguins.start({ count: count.n });
-    };
-    document.getElementById('btn-stop').onclick = () => XPenguins.stop();
-    document.getElementById('btn-more').onclick = () => {
-      count.n += 4;
-      if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
-    };
-    document.getElementById('btn-less').onclick = () => {
-      count.n = Math.max(0, count.n - 4);
-      if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
-    };
-    let squish = false;
-    document.getElementById('btn-squish').onclick = () => {
-      squish = !squish;
-      if (XPenguins.isRunning()) {
-        XPenguins.stop();
-        setTimeout(() => XPenguins.start({ count: count.n, squish }), 100);
+    (function () {
+      function boot() {
+        if (typeof XPenguins === 'undefined') {
+          console.error('[xpenguins-web] XPenguins is not defined. Open via: node scripts/serve.mjs');
+          document.body.insertAdjacentHTML('afterbegin',
+            '<p style="background:#fee;padding:1rem;font-family:sans-serif">' +
+            '<strong>XPenguins failed to load.</strong> Run <code>node scripts/build.mjs && node scripts/serve.mjs</code> ' +
+            'and open <code>http://127.0.0.1:8765/examples/index.html</code>.</p>');
+          return;
+        }
+        const count = { n: 10 };
+        let squish = false;
+        document.getElementById('btn-start').onclick = function () {
+          XPenguins.start({ count: count.n, squish: squish });
+        };
+        document.getElementById('btn-stop').onclick = function () { XPenguins.stop(); };
+        document.getElementById('btn-more').onclick = function () {
+          count.n += 4;
+          if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
+        };
+        document.getElementById('btn-less').onclick = function () {
+          count.n = Math.max(0, count.n - 4);
+          if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
+        };
+        document.getElementById('btn-squish').onclick = function () {
+          squish = !squish;
+          if (XPenguins.isRunning()) {
+            XPenguins.stop();
+            setTimeout(function () { XPenguins.start({ count: count.n, squish: squish }); }, 150);
+          }
+        };
+        XPenguins.start({ count: count.n, squish: squish });
       }
-    };
-    // Auto-start for demo
-    XPenguins.start({ count: count.n, squish });
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+      } else {
+        boot();
+      }
+    })();
   </script>
 </body>
 </html>

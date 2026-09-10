@@ -12,17 +12,22 @@ const mime = {
   '.css': 'text/css; charset=utf-8',
   '.png': 'image/png',
   '.json': 'application/json',
+  '.md': 'text/markdown; charset=utf-8',
 };
 
 http.createServer((req, res) => {
-  let url = decodeURIComponent(req.url.split('?')[0]);
+  let url = decodeURIComponent((req.url || '/').split('?')[0]);
   if (url === '/') url = '/examples/index.html';
-  const fp = path.join(root, url.replace(/^\//, ''));
+  const fp = path.normalize(path.join(root, url.replace(/^\//, '')));
   if (!fp.startsWith(root) || !fs.existsSync(fp) || fs.statSync(fp).isDirectory()) {
-    res.writeHead(404);
-    res.end('Not found');
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Not found: ' + url + '\n');
     return;
   }
   res.writeHead(200, { 'Content-Type': mime[path.extname(fp)] || 'application/octet-stream' });
   fs.createReadStream(fp).pipe(res);
-}).listen(port, () => console.log('http://127.0.0.1:' + port + '/examples/index.html'));
+}).listen(port, () => {
+  console.log('xpenguins-web static server');
+  console.log('  demo:   http://127.0.0.1:' + port + '/examples/index.html');
+  console.log('  bundle: http://127.0.0.1:' + port + '/dist/xpenguins-web.js');
+});
