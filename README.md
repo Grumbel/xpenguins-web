@@ -11,21 +11,34 @@ embedded in the bundle.
 
 ## Quick start
 
+The **runtime is static**: one JS file with embedded sprites. You only need
+Node (or Nix) if you change sources and must **rebuild** that file.
+
 ```bash
-node scripts/build.mjs
-node scripts/serve.mjs
-# open http://127.0.0.1:8765/examples/index.html
+# After a normal git checkout, examples/ already includes the bundle:
+#   examples/index.html
+#   examples/xpenguins-web.js
+#
+# Open with any static server, e.g.:
+python3 -m http.server -d examples 8080
+# → http://127.0.0.1:8080/
+#
+# Or open examples/index.html in a browser (file:// works; the script is local).
 ```
 
-Or with Nix:
+Rebuild the bundle after editing `src/` or themes:
 
 ```bash
-nix develop          # node + imagemagick
-nix run .#build      # → dist/xpenguins-web.js
-nix run .#serve      # http://127.0.0.1:8765/examples/index.html
-nix run              # same as #serve
-nix flake check      # package derivation + unit tests
-nix build            # result/share/xpenguins-web/
+node scripts/build.mjs   # writes dist/ and examples/xpenguins-web.js
+# or: nix run .#build
+```
+
+Optional helpers (not required to view the demo):
+
+```bash
+nix run .#serve          # tiny static server on :8765
+nix flake check          # package + unit tests
+nix build                # result/share/xpenguins-web/
 ```
 
 Drop onto any page:

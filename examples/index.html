@@ -314,16 +314,19 @@
     <p>Footer shelf — solid ground. The viewport floor is always walkable too.</p>
   </footer>
 
-  <script src="../dist/xpenguins-web.js"></script>
+  <script src="./xpenguins-web.js"></script>
   <script>
     (function () {
       function boot() {
         if (typeof XPenguins === 'undefined') {
-          console.error('[xpenguins-web] XPenguins is not defined. Open via: node scripts/serve.mjs');
+          console.error('[xpenguins-web] XPenguins is not defined (bundle missing or blocked).');
           document.body.insertAdjacentHTML('afterbegin',
             '<p style="background:#fee;padding:1rem;font-family:sans-serif">' +
-            '<strong>XPenguins failed to load.</strong> Run <code>node scripts/build.mjs && node scripts/serve.mjs</code> ' +
-            'and open <code>http://127.0.0.1:8765/examples/index.html</code>.</p>');
+            '<strong>XPenguins failed to load.</strong> Expected <code>examples/xpenguins-web.js</code> ' +
+            'next to this page (a static file — no Node required to <em>view</em> it). ' +
+            'If the file is missing, build once with <code>nix run .#build</code> or ' +
+            '<code>node scripts/build.mjs</code>, then open this folder with any static server ' +
+            'or open <code>index.html</code> directly.</p>');
           return;
         }
         const count = { n: 16 };

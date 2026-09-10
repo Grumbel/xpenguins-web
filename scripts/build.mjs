@@ -81,4 +81,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = XPenguins;
 fs.mkdirSync(distDir, { recursive: true });
 const out = path.join(distDir, 'xpenguins-web.js');
 fs.writeFileSync(out, body);
-console.log('Wrote', out, '(' + Math.round(body.length / 1024) + ' KiB,', files.size, 'sprites)');
+/* Self-contained static demo: examples/ needs no ../dist or special server */
+const exampleOut = path.join(root, 'examples', 'xpenguins-web.js');
+fs.writeFileSync(exampleOut, body);
+console.log('Wrote', out, 'and', exampleOut,
+  '(' + Math.round(body.length / 1024) + ' KiB,', files.size, 'sprites)');
