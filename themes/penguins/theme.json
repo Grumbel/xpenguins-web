@@ -81,7 +81,15 @@
           "directions": 1,
           "speed": 0
         },
-        "action": {
+        "zapped": {
+          "file": "zapped.png",
+          "width": 33,
+          "height": 32,
+          "frames": 10,
+          "directions": 2,
+          "speed": 0
+        },
+        "action0": {
           "file": "reader.png",
           "width": 30,
           "height": 30,
@@ -90,13 +98,14 @@
           "speed": 0,
           "loop": -4
         },
-        "zapped": {
-          "file": "zapped.png",
-          "width": 33,
+        "action1": {
+          "file": "digger.png",
+          "width": 32,
           "height": 32,
-          "frames": 10,
-          "directions": 2,
-          "speed": 0
+          "frames": 14,
+          "directions": 1,
+          "speed": 0,
+          "loop": -6
         }
       }
     },
@@ -182,15 +191,6 @@
           "directions": 1,
           "speed": 0
         },
-        "action": {
-          "file": "digger.png",
-          "width": 32,
-          "height": 32,
-          "frames": 14,
-          "directions": 1,
-          "speed": 0,
-          "loop": -6
-        },
         "zapped": {
           "file": "zapped.png",
           "width": 33,
@@ -198,6 +198,15 @@
           "frames": 10,
           "directions": 2,
           "speed": 0
+        },
+        "action0": {
+          "file": "digger.png",
+          "width": 32,
+          "height": 32,
+          "frames": 14,
+          "directions": 1,
+          "speed": 0,
+          "loop": -6
         }
       }
     }

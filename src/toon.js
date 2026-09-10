@@ -54,10 +54,36 @@ export function pickGenus(theme) {
 
 export function typeDef(theme, genus, type) {
   if (genus && genus.types && genus.types[type]) return genus.types[type];
+  /* Classic alias: "action" → first defined action0 / action */
+  if (type === Type.ACTION || type === 'action') {
+    const acts = listActionKeys(genus || (theme.genera && theme.genera[0]) || { types: theme.types });
+    if (acts.length) {
+      const k = acts[0];
+      if (genus && genus.types && genus.types[k]) return genus.types[k];
+      if (theme.types && theme.types[k]) return theme.types[k];
+    }
+  }
   if (theme.types && theme.types[type]) return theme.types[type];
-  const g0 = themeGenera(theme)[0];
-  return g0.types[type] || g0.types.walker;
+  const g0 = theme.genera && theme.genera[0];
+  return (g0 && g0.types && g0.types[type]) || null;
 }
+
+/** Classic PENGUIN_ACTION0..ACTION5 keys present on a genus. */
+export function listActionKeys(genus) {
+  const types = (genus && genus.types) || {};
+  const out = [];
+  if (types.action) out.push('action');
+  for (let i = 0; i < 6; i++) {
+    const k = 'action' + i;
+    if (types[k]) out.push(k);
+  }
+  return out;
+}
+
+export function isActionType(type) {
+  return type === Type.ACTION || type === 'action' || /^action[0-5]$/.test(type || '');
+}
+
 
 export function createToon(vw, theme, genus) {
   const g = genus || pickGenus(theme);
@@ -174,7 +200,7 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
     return;
   }
 
-  if (t.type === Type.ACTION) {
+  if (isActionType(t.type)) {
     /* Classic: decide whether to stop when a full strip loop completes (frame→0). */
     const loop = def.loop != null ? def.loop : -4;
     if (t.frame === 0 && t.cycle > 0) {
@@ -246,10 +272,13 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
       return;
     }
     t.y = support.y - h;
-    /* Classic: ~1/100 frames a grounded walker starts action0 (reader / digger). */
-    if (typeDef(theme, t.genus, Type.ACTION) && rand(100) === 0) {
-      setType(t, Type.ACTION, theme, true);
-      return;
+    /* Classic: ~1/100 frames → random action0..actionN (reader, digger, …). */
+    {
+      const acts = listActionKeys(t.genus);
+      if (acts.length && rand(100) === 0) {
+        setType(t, acts[rand(acts.length)], theme, true);
+        return;
+      }
     }
     const side = dirSign(t.dir);
     const block = blockedSide(solids, t.x, t.y, w, h, side);
@@ -278,7 +307,8 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         t.x = side > 0 ? block.x - w : block.x + block.w;
         t.vx = 0;
         t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
-      } else if (r < 5 && typeDef(theme, t.genus, Type.FLOATER)) {
+      } else if (typeDef(theme, t.genus, Type.FLOATER) && r < 6) {
+        /* Floater = "superpenguin" for skateboarders in the classic theme. */
         t.dir = 1 - t.dir;
         setType(t, Type.FLOATER, theme, true);
       } else {

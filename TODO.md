@@ -114,3 +114,15 @@ node scripts/build.mjs && node scripts/serve.mjs
 ```
 
 Toggle Squish should switch pointer capture immediately without restarting.
+
+## Actions parity (classic Penguins theme)
+
+| Classic | Web |
+|---------|-----|
+| normal action0 reader | action0 reader |
+| normal action1 digger | action1 digger |
+| skater action0 digger | action0 digger |
+| skater floater superpenguin | floater → superpenguin.png |
+| normal exit bomber | exit → bomber.png |
+| runner / squashed | still absent (not in this theme’s config either for squashed; runner optional) |
+
