@@ -4,8 +4,10 @@ Cool little penguins walking along the tops of your **DOM elements**.
 
 Browser companion to [xpenguins-ng](https://github.com/grumbel/xpenguins-ng)
 (native X11). Classic toon types (faller, walker, tumbler, climber, floater,
-exit, angel, …) are approximated in JavaScript; sprites come from the
-**Penguins** theme converted to PNG and **embedded** in a single file.
+exit, angel, …) are approximated in JavaScript. The embedded **Penguins**
+theme includes both **normal** and **skateboarder** genera (weighted
+spawn, same idea as xpenguins config `number`). Sprites are PNG strips
+embedded in the bundle.
 
 ## Quick start
 
@@ -33,10 +35,14 @@ Drop onto any page:
 
 | Call | Meaning |
 |------|---------|
-| `XPenguins.start({ count, blood, angels })` | Spawn overlay + toons |
+| `XPenguins.start({ count, blood, angels, squish })` | Spawn overlay + toons |
 | `XPenguins.stop()` | Exit animation then remove overlay |
 | `XPenguins.setNumber(n)` | Grow/shrink population |
 | `XPenguins.isRunning()` | Boolean |
+
+Options: `squish: true` enables click-to-squash (canvas captures pointers).
+`respectReducedMotion: true` (default) skips start when the user prefers reduced motion.
+Solids refresh on scroll/resize and via `ResizeObserver` / `MutationObserver`.
 
 Mark elements that should **not** be ledges:
 

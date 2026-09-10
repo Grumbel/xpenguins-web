@@ -1,12 +1,13 @@
 {
   "name": "xpenguins-web",
   "version": "0.1.0",
-  "description": "XPenguins for the web — toons walk on DOM elements",
+  "description": "XPenguins for the web \u2014 toons walk on DOM elements",
   "license": "GPL-2.0-or-later",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "serve": "node scripts/serve.mjs"
+    "serve": "node scripts/serve.mjs",
+    "test": "node scripts/test-solids.mjs"
   },
   "files": [
     "dist/xpenguins-web.js",

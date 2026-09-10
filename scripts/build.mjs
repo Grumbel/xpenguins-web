@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 /**
  * Bundle src/ into dist/xpenguins-web.js with theme PNGs embedded as data URLs.
- * No heavy bundler required: concatenate ES modules into one IIFE via a thin wrapper.
- *
- * For clarity we use dynamic import in Node to load nothing of the browser code —
- * we string-assemble the browser sources and inject EMBEDDED JSON.
  */
 
 import fs from 'fs';
@@ -23,63 +19,58 @@ function dataUrlPng(filePath) {
 
 const theme = JSON.parse(fs.readFileSync(path.join(themeDir, 'theme.json'), 'utf8'));
 const images = {};
-for (const def of Object.values(theme.types)) {
-  const base = def.file.replace(/\.png$/, '');
-  const fp = path.join(themeDir, def.file);
+const files = new Set();
+
+function collectFiles(types) {
+  if (!types) return;
+  for (const def of Object.values(types)) {
+    if (def.file) files.add(def.file);
+  }
+}
+
+if (theme.genera) {
+  for (const g of theme.genera) collectFiles(g.types);
+} else {
+  collectFiles(theme.types);
+}
+
+for (const file of files) {
+  const fp = path.join(themeDir, file);
   if (!fs.existsSync(fp)) {
-    console.warn('missing', def.file);
+    console.warn('missing sprite', file);
     continue;
   }
-  images[base] = dataUrlPng(fp);
+  const key = file.replace(/\.png$/i, '');
+  images[key] = dataUrlPng(fp);
 }
-// aliases used by renderer
-if (images.bomber) images.exit = images.bomber;
-if (images.reader) images.action = images.reader;
-if (images.splat) images.splat = images.splat;
 
 const embedded = { theme, images };
 
-function readSrc(name) {
-  return fs.readFileSync(path.join(root, 'src', name), 'utf8')
-    // strip ES import/export for naive concat IIFE — rewrite manually below
-    ;
+function stripModule(src) {
+  return src
+    .replace(/import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];?\n?/g, '')
+    .replace(/export default api;?/g, '')
+    .replace(/export \{[^}]+\};?/g, '')
+    .replace(/^export /gm, '');
 }
 
-// We emit a single file that inlines modules in dependency order without a bundler.
-const solids = fs.readFileSync(path.join(root, 'src/solids.js'), 'utf8')
-  .replace(/export \{[^}]+\};?/g, '')
-  .replace(/^export /gm, '');
-const toon = fs.readFileSync(path.join(root, 'src/toon.js'), 'utf8')
-  .replace(/import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];?\n?/g, '')
-  .replace(/export \{[^}]+\};?/g, '')
-  .replace(/^export /gm, '');
-const render = fs.readFileSync(path.join(root, 'src/render.js'), 'utf8')
-  .replace(/export \{[^}]+\};?/g, '')
-  .replace(/^export /gm, '');
-const index = fs.readFileSync(path.join(root, 'src/index.js'), 'utf8')
-  .replace(/import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"];?\n?/g, '')
+const solids = stripModule(fs.readFileSync(path.join(root, 'src/solids.js'), 'utf8'));
+const toon = stripModule(fs.readFileSync(path.join(root, 'src/toon.js'), 'utf8'));
+const render = stripModule(fs.readFileSync(path.join(root, 'src/render.js'), 'utf8'));
+let index = stripModule(fs.readFileSync(path.join(root, 'src/index.js'), 'utf8'));
+index = index
   .replace(/export const EMBEDDED[\s\S]*?;\n/, '')
-  .replace(/typeof __XPENGUINS_EMBEDDED__[\s\S]*?null/, 'null')
-  .replace(/export default api;?/g, '')
-  .replace(/export \{[^}]+\};?/g, '')
-  .replace(/^export /gm, '');
+  .replace(/const EMBEDDED = typeof __XPENGUINS_EMBEDDED__[\s\S]*?;/, '');
 
-const banner = `/*! xpenguins-web — GPL-2.0-or-later — penguins on the DOM */\n`;
+const banner = '/*! xpenguins-web — GPL-2.0-or-later — penguins on the DOM */\n';
 const body = `${banner}(function (global) {
 'use strict';
 const __XPENGUINS_EMBEDDED__ = ${JSON.stringify(embedded)};
-
 ${solids}
 ${toon}
 ${render}
-
 const EMBEDDED = __XPENGUINS_EMBEDDED__;
-
-${index.replace(
-  /const pack = userOpts\.pack \|\| EMBEDDED;/,
-  'const pack = userOpts.pack || EMBEDDED;',
-)}
-
+${index}
 const XPenguins = { start, stop, setNumber, isRunning, collectSolids };
 global.XPenguins = XPenguins;
 if (typeof module !== 'undefined' && module.exports) module.exports = XPenguins;
@@ -89,4 +80,4 @@ if (typeof module !== 'undefined' && module.exports) module.exports = XPenguins;
 fs.mkdirSync(distDir, { recursive: true });
 const out = path.join(distDir, 'xpenguins-web.js');
 fs.writeFileSync(out, body);
-console.log('Wrote', out, '(' + Math.round(body.length / 1024) + ' KiB)');
+console.log('Wrote', out, '(' + Math.round(body.length / 1024) + ' KiB,', files.size, 'sprites)');

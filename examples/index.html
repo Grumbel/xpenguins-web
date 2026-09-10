@@ -42,6 +42,7 @@
       <button type="button" id="btn-stop">Stop</button>
       <button type="button" id="btn-more">More penguins</button>
       <button type="button" id="btn-less">Fewer</button>
+      <button type="button" id="btn-squish">Toggle squish</button>
     </div>
     <div class="card">
       <h2>Ledge one</h2>
@@ -81,8 +82,16 @@
       count.n = Math.max(0, count.n - 4);
       if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
     };
+    let squish = false;
+    document.getElementById('btn-squish').onclick = () => {
+      squish = !squish;
+      if (XPenguins.isRunning()) {
+        XPenguins.stop();
+        setTimeout(() => XPenguins.start({ count: count.n, squish }), 100);
+      }
+    };
     // Auto-start for demo
-    XPenguins.start({ count: count.n });
+    XPenguins.start({ count: count.n, squish });
   </script>
 </body>
 </html>

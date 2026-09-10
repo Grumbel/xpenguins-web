@@ -11,13 +11,25 @@
 - [x] Example `examples/index.html`
 - [x] Bookmarklet recipe in README
 
+## Done (continued)
+
+- [x] ResizeObserver / MutationObserver / scroll for dynamic solids
+- [x] rAF loop gated by theme `delay`
+- [x] Squish on click (`squish: true`)
+- [x] `prefers-reduced-motion` respect (default on)
+- [x] Basic geometry unit tests (`npm test`)
+
+## Done (continued)
+
+- [x] Skateboarder genus (weighted spawn with normal)
+- [x] Theme `genera[]` + per-genus sprite maps
+- [x] Genus-aware typeDef / image keys from `file`
+- [x] Tests for genera and ballooner/skateboarder mapping
+
 ## Next
 
-- [ ] Skateboarder genus / multi-theme loader
-- [ ] ResizeObserver / MutationObserver for dynamic layout
-- [ ] Prefer `requestAnimationFrame` timing tuned to theme `delay`
-- [ ] Squish on click (temporary `pointer-events: auto`)
+- [ ] Additional themes (Big Penguins, Turtles, …) as selectable packs
 - [ ] npm publish / CDN example
-- [ ] Reduce bundle size (quantized PNGs, subset of frames)
-- [ ] Respect `prefers-reduced-motion`
-- [ ] Unit tests for ledge detection and FSM transitions
+- [ ] Reduce bundle size (quantized PNGs)
+- [ ] Stronger physics parity with xpenguins-ng toon_core
+- [ ] More FSM transition unit tests

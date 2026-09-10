@@ -9,7 +9,9 @@
  */
 
 import { collectSolids } from './solids.js';
-import { createToon, stepToon, terminateToon, Type } from './toon.js';
+import {
+  createToon, stepToon, terminateToon, squishToon, hitToon, typeDef, Type,
+} from './toon.js';
 import { createOverlay, drawToon } from './render.js';
 
 /** Filled by build.mjs with { theme, images: { walker: dataURL, ... } } */
@@ -22,16 +24,24 @@ let toons = [];
 let images = {};
 let theme = null;
 let raf = 0;
-let timer = 0;
 let running = false;
 let solids = [];
-let solidsAge = 0;
+let lastSolids = 0;
+let lastFrame = 0;
+let observers = [];
 let opts = {
   count: 8,
   blood: true,
   angels: true,
-  solidRefreshMs: 500,
+  squish: false,
+  solidRefreshMs: 400,
+  respectReducedMotion: true,
 };
+
+function spriteKey(def) {
+  if (!def || !def.file) return null;
+  return def.file.replace(/\.png$/i, '');
+}
 
 function loadImages(map) {
   const entries = Object.entries(map);
@@ -47,82 +57,148 @@ function loadImages(map) {
   });
 }
 
-function tick() {
+function refreshSolids() {
+  solids = collectSolids();
+  lastSolids = performance.now();
+}
+
+function onPointerDown(ev) {
+  if (!opts.squish || !theme) return;
+  const px = ev.clientX;
+  const py = ev.clientY;
+  for (let i = toons.length - 1; i >= 0; i--) {
+    const t = toons[i];
+    if (hitToon(t, theme, px, py)) {
+      squishToon(t, theme, opts);
+      break;
+    }
+  }
+}
+
+function drawAll() {
+  if (!overlay) return;
+  const { ctx, canvas } = overlay;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+  for (const t of toons) {
+    if (!t.active) continue;
+    const def = typeDef(theme, t.genus, t.type);
+    if (!def) continue;
+    const key = spriteKey(def);
+    drawToon(ctx, images[key], def, t);
+  }
+}
+
+function tick(now) {
   if (!running) return;
+  raf = requestAnimationFrame(tick);
+
+  const delay = theme.delay || 60;
+  if (now - lastFrame < delay) return;
+  lastFrame = now;
+
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const now = performance.now();
-  if (now - solidsAge > opts.solidRefreshMs) {
-    solids = collectSolids();
-    solidsAge = now;
-  }
+  if (now - lastSolids > opts.solidRefreshMs) refreshSolids();
+
   for (const t of toons) {
     stepToon(t, solids, theme, vw, vh, opts);
   }
-  const { ctx, canvas } = overlay;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const t of toons) {
-    if (!t.active) continue;
-    const def = theme.types[t.type];
-    if (!def) continue;
-    const img = images[t.type] || images[def.file?.replace(/\.png$/, '')];
-    // map type name to image key
-    const key = t.type === 'exit' ? 'bomber'
-      : t.type === 'splat' ? 'splat'
-      : t.type === 'action' ? 'reader'
-      : t.type;
-    drawToon(ctx, images[key] || img, def, t);
+  drawAll();
+}
+
+function attachObservers() {
+  detachObservers();
+  const refresh = () => { if (running) refreshSolids(); };
+  window.addEventListener('resize', refresh);
+  window.addEventListener('scroll', refresh, true);
+  observers.push(() => {
+    window.removeEventListener('resize', refresh);
+    window.removeEventListener('scroll', refresh, true);
+  });
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(refresh);
+    ro.observe(document.documentElement);
+    observers.push(() => ro.disconnect());
   }
-  timer = window.setTimeout(() => {
-    raf = requestAnimationFrame(tick);
-  }, theme.delay || 60);
+  if (typeof MutationObserver !== 'undefined' && document.body) {
+    const mo = new MutationObserver(refresh);
+    mo.observe(document.body, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['style', 'class', 'hidden'],
+    });
+    observers.push(() => mo.disconnect());
+  }
+}
+
+function detachObservers() {
+  while (observers.length) observers.pop()();
 }
 
 async function start(userOpts = {}) {
   if (running) stop();
   opts = { ...opts, ...userOpts };
+
+  if (opts.respectReducedMotion !== false &&
+      typeof matchMedia === 'function' &&
+      matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    console.info('[xpenguins-web] prefers-reduced-motion: not starting');
+    return api;
+  }
+
   const pack = userOpts.pack || EMBEDDED;
   if (!pack || !pack.theme || !pack.images) {
     throw new Error('xpenguins-web: no embedded theme; build dist bundle or pass pack');
   }
   theme = pack.theme;
   images = await loadImages(pack.images);
-  overlay = createOverlay();
+  overlay = createOverlay({ interactive: !!opts.squish });
+  if (opts.squish) {
+    overlay.canvas.addEventListener('pointerdown', onPointerDown);
+  }
+
   const n = opts.count ?? theme.defaultCount ?? 8;
   toons = [];
   for (let i = 0; i < n; i++) toons.push(createToon(window.innerWidth, theme));
+
   running = true;
-  solids = collectSolids();
-  solidsAge = performance.now();
+  refreshSolids();
+  lastFrame = 0;
+  attachObservers();
   raf = requestAnimationFrame(tick);
   return api;
 }
 
 function stop() {
+  if (!running && !overlay) return;
   running = false;
   if (raf) cancelAnimationFrame(raf);
-  if (timer) clearTimeout(timer);
   raf = 0;
-  timer = 0;
-  // play exit on all then tear down shortly
+  detachObservers();
+
   if (overlay && theme) {
+    if (opts.squish) {
+      overlay.canvas.removeEventListener('pointerdown', onPointerDown);
+    }
     for (const t of toons) terminateToon(t, theme);
-    const { ctx, canvas } = overlay;
+    overlay.setInteractive(false);
     let frames = 0;
     const finish = () => {
       frames++;
-      solids = collectSolids();
-      for (const t of toons) stepToon(t, solids, theme, innerWidth, innerHeight, opts);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      refreshSolids();
       for (const t of toons) {
-        const def = theme.types[t.type];
-        if (!def) continue;
-        const key = t.type === 'exit' ? 'bomber' : t.type === 'angel' ? 'angel' : t.type;
-        drawToon(ctx, images[key], def, t);
+        stepToon(t, solids, theme, innerWidth, innerHeight, opts);
       }
-      if (frames < 40 && toons.some((t) => t.type === Type.EXIT || t.type === Type.ANGEL)) {
+      drawAll();
+      const dying = toons.some(
+        (t) => t.type === Type.EXIT || t.type === Type.ANGEL ||
+          t.type === Type.SPLAT || t.type === Type.EXPLOSION,
+      );
+      if (frames < 48 && dying) {
         setTimeout(finish, theme.delay || 60);
-      } else {
+      } else if (overlay) {
         overlay.destroy();
         overlay = null;
         toons = [];
@@ -132,6 +208,7 @@ function stop() {
   } else if (overlay) {
     overlay.destroy();
     overlay = null;
+    toons = [];
   }
 }
 
@@ -146,7 +223,9 @@ function isRunning() {
   return running;
 }
 
-const api = { start, stop, setNumber, isRunning, collectSolids };
+const api = {
+  start, stop, setNumber, isRunning, collectSolids,
+};
 
 export { start, stop, setNumber, isRunning, collectSolids };
 export default api;

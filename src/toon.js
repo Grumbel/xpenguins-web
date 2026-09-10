@@ -1,5 +1,5 @@
 /**
- * Single toon state machine (classic-inspired).
+ * Single toon state machine (classic-inspired), with multi-genus themes.
  */
 
 import { findSupport, blockedSide, hitCeiling } from './solids.js';
@@ -21,30 +21,59 @@ function rand(n) {
   return Math.floor(Math.random() * n);
 }
 
-export function createToon(vw, theme) {
-  const tw = theme.types.faller.width;
+/** Resolve genera list (back-compat with flat theme.types). */
+export function themeGenera(theme) {
+  if (theme.genera && theme.genera.length) return theme.genera;
+  return [{ name: 'default', weight: 1, types: theme.types }];
+}
+
+export function pickGenus(theme) {
+  const genera = themeGenera(theme);
+  let total = 0;
+  for (const g of genera) total += g.weight || 1;
+  let r = Math.random() * total;
+  for (const g of genera) {
+    r -= g.weight || 1;
+    if (r <= 0) return g;
+  }
+  return genera[0];
+}
+
+export function typeDef(theme, genus, type) {
+  if (genus && genus.types && genus.types[type]) return genus.types[type];
+  if (theme.types && theme.types[type]) return theme.types[type];
+  const g0 = themeGenera(theme)[0];
+  return g0.types[type] || g0.types.walker;
+}
+
+export function createToon(vw, theme, genus) {
+  const g = genus || pickGenus(theme);
+  const fall = typeDef(theme, g, Type.FALLER);
   return {
     active: true,
+    genus: g,
     type: Type.FALLER,
-    x: rand(Math.max(1, vw - tw)),
-    y: -theme.types.faller.height,
+    x: rand(Math.max(1, vw - fall.width)),
+    y: -fall.height,
     vx: 0,
-    vy: theme.types.faller.speed,
-    dir: rand(2), // 0 left-facing row often = right in strips; we use 0=right,1=left
+    vy: fall.speed,
+    dir: rand(2),
     frame: 0,
     frameAcc: 0,
     climbSide: 0,
-    actionLoops: 0,
     terminating: false,
   };
 }
 
 function setType(t, type, theme, keepDir) {
   t.type = type;
-  const def = theme.types[type] || theme.types.walker;
+  const def = typeDef(theme, t.genus, type);
   t.frame = 0;
   t.frameAcc = 0;
-  if (!keepDir) t.dir = t.dir % (def.directions || 1);
+  const dirs = def.directions || 1;
+  if (!keepDir) t.dir = t.dir % dirs;
+  else t.dir = t.dir % dirs;
+
   if (type === Type.FALLER) {
     t.vx = 0;
     t.vy = def.speed;
@@ -59,7 +88,7 @@ function setType(t, type, theme, keepDir) {
     t.vy = -def.speed;
   } else if (type === Type.FLOATER) {
     t.vx = (t.dir === 0 ? 1 : -1) * def.speed;
-    t.vy = -def.speed * 0.3;
+    t.vy = -def.speed * 0.25;
   } else if (type === Type.ANGEL) {
     t.vx = (Math.random() - 0.5) * 2;
     t.vy = -def.speed;
@@ -72,11 +101,10 @@ function setType(t, type, theme, keepDir) {
 export function stepToon(t, solids, theme, vw, vh, opts) {
   if (!t.active) return;
 
-  const def = theme.types[t.type] || theme.types.walker;
+  const def = typeDef(theme, t.genus, t.type);
   const w = def.width;
   const h = def.height;
 
-  // Animate frames
   t.frameAcc += 1;
   const frameDelay = 2;
   if (t.frameAcc >= frameDelay) {
@@ -86,10 +114,10 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
 
   if (t.type === Type.EXIT || t.type === Type.SPLAT || t.type === Type.EXPLOSION) {
     if (t.frame >= def.frames - 1 && t.frameAcc === 0) {
-      if (opts.angels && theme.types.angel) {
+      const hasAngel = !!typeDef(theme, t.genus, Type.ANGEL);
+      if (opts.angels !== false && hasAngel) {
         setType(t, Type.ANGEL, theme, true);
       } else {
-        // Respawn
         Object.assign(t, createToon(vw, theme));
       }
     }
@@ -104,23 +132,28 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   }
 
   if (t.type === Type.ACTION) {
-    if (def.loop < 0 && rand(-def.loop) === 0) {
+    const loop = def.loop || -4;
+    if (loop < 0 && rand(-loop) === 0) {
       setType(t, Type.WALKER, theme, true);
     }
     return;
   }
 
-  // Integrate
   if (t.type === Type.TUMBLER) {
     t.vy = Math.min(
-      (def.terminalVelocity || 8),
+      def.terminalVelocity || 8,
       t.vy + (def.acceleration || 1) * 0.15,
     );
+  } else if (t.type === Type.WALKER && def.acceleration) {
+    const cap = def.terminalVelocity || 12;
+    const sign = t.dir === 0 ? 1 : -1;
+    t.vx = Math.sign(t.vx || sign) *
+      Math.min(cap, Math.abs(t.vx) + def.acceleration * 0.05);
   }
+
   t.x += t.vx;
   t.y += t.vy;
 
-  // World bounds
   if (t.x < -w) t.x = vw;
   if (t.x > vw) t.x = -w;
 
@@ -128,21 +161,20 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
     const ceil = hitCeiling(solids, t.x, t.y, w, h);
     if (ceil && t.vy < 0) {
       setType(t, Type.FALLER, theme, true);
-      t.vy = Math.abs(theme.types.faller.speed);
+      t.vy = Math.abs(typeDef(theme, t.genus, Type.FALLER).speed);
     }
     const support = findSupport(solids, t.x, t.y, w, h, 4);
     if (support) {
       t.y = support.y - h;
       if (t.type === Type.TUMBLER && t.vy > 5 && rand(3) === 0) {
-        setType(t, Type.SPLAT, theme, true);
+        setType(t, opts.blood === false ? Type.EXPLOSION : Type.SPLAT, theme, true);
         return;
       }
       setType(t, Type.WALKER, theme, true);
-      // occasional idle action
-      if (theme.types.action && rand(40) === 0) {
+      if (typeDef(theme, t.genus, Type.ACTION) && rand(40) === 0) {
         setType(t, Type.ACTION, theme, true);
       }
-    } else if (t.y > vh + 20) {
+    } else if (t.y > vh + 40) {
       Object.assign(t, createToon(vw, theme));
     }
     return;
@@ -158,9 +190,8 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
     const block = blockedSide(solids, t.x, t.y, w, h, t.dir === 0 ? 1 : -1);
     if (block) {
       const r = rand(5);
-      if (r === 0) {
-        setType(t, Type.FLOATER, theme, true);
-      } else if (r <= 2) {
+      if (r === 0) setType(t, Type.FLOATER, theme, true);
+      else if (r <= 2) {
         t.climbSide = t.dir === 0 ? 1 : -1;
         setType(t, Type.CLIMBER, theme, true);
         t.x = t.dir === 0 ? block.x - w : block.x + block.w;
@@ -169,7 +200,6 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         t.vx = (t.dir === 0 ? 1 : -1) * def.speed;
       }
     }
-    // end of ledge
     const cx = t.x + w / 2;
     if (cx < support.x + 2 || cx > support.x + support.w - 2) {
       if (rand(2) === 0) setType(t, Type.TUMBLER, theme, true);
@@ -183,7 +213,6 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
 
   if (t.type === Type.CLIMBER) {
     const side = t.climbSide || (t.dir === 0 ? 1 : -1);
-    // stick to wall x
     const block = blockedSide(solids, t.x - side * 2, t.y, w, h, side);
     if (!block) {
       setType(t, Type.FALLER, theme, true);
@@ -191,7 +220,6 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
     }
     t.x = side > 0 ? block.x - w : block.x + block.w;
     if (t.y + h <= block.y + 2) {
-      // reached top → walk
       t.y = block.y - h;
       t.dir = side > 0 ? 0 : 1;
       setType(t, Type.WALKER, theme, true);
@@ -213,4 +241,18 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
 export function terminateToon(t, theme) {
   t.terminating = true;
   setType(t, Type.EXIT, theme, true);
+}
+
+export function squishToon(t, theme, opts) {
+  if (!t.active || t.terminating) return;
+  if (t.type === Type.EXIT || t.type === Type.ANGEL ||
+      t.type === Type.SPLAT || t.type === Type.EXPLOSION) return;
+  if (opts && opts.blood === false) setType(t, Type.EXPLOSION, theme, true);
+  else setType(t, Type.SPLAT, theme, true);
+}
+
+export function hitToon(t, theme, px, py) {
+  const def = typeDef(theme, t.genus, t.type);
+  return px >= t.x && px <= t.x + def.width &&
+    py >= t.y && py <= t.y + def.height;
 }
