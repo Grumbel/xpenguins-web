@@ -87,6 +87,11 @@ DOM solids + floor; squish; reduced-motion; observers.
 
 **N/A on web:** X11 tray, root/overlay drawing modes, XShape, signals.
 
+## Done (playground demo)
+
+- [x] Example page: staggered shelves, tower, pillar, gaps so walkers
+      actually hit walls (climb) and drop off ends (tumble)
+
 ## Next
 
 

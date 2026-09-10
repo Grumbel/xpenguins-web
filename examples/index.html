@@ -4,69 +4,257 @@
   <meta charset="utf-8" />
   <title>xpenguins-web example</title>
   <style>
-    :root { font-family: system-ui, sans-serif; }
-    body { margin: 0; background: #e8f0fe; color: #1a1a1a; }
-    header {
-      background: #1e3a5f; color: #fff; padding: 1.5rem 2rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    :root {
+      font-family: system-ui, sans-serif;
+      --ink: #1a1a1a;
+      --sky: #cfe0f5;
+      --card: #fffef8;
+      --accent: #1e3a5f;
+      --tower: #3d5a80;
+      --shelf: #ee6c4d;
+      --shelf2: #98c1d9;
     }
-    main { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
-    .card {
-      background: #fff; border-radius: 12px; padding: 1.25rem 1.5rem;
-      margin: 1rem 0; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, #b8d4f0 0%, var(--sky) 40%, #e8f0fe 100%);
+      color: var(--ink);
+      min-height: 100vh;
     }
-    .toolbar { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+    header.banner {
+      /* top > minTop (12) so it stays a walkable ledge after a little scroll */
+      margin: 1.25rem 1rem 0;
+      background: var(--accent);
+      color: #fff;
+      padding: 1.1rem 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(30, 58, 95, .35);
+      max-width: 56rem;
+    }
+    header.banner h1 { margin: 0 0 .35rem; font-size: 1.45rem; }
+    header.banner p { margin: 0; opacity: .9; font-size: .95rem; }
+
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: .5rem;
+      max-width: 56rem; margin: 1rem; padding: 0;
+    }
     button {
-      font: inherit; padding: .45rem 1rem; border-radius: 8px; border: 1px solid #ccc;
-      background: #fff; cursor: pointer;
+      font: inherit; padding: .45rem 1rem; border-radius: 8px;
+      border: 1px solid #9ab; background: #fff; cursor: pointer;
     }
-    button.primary { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+    button.primary {
+      background: var(--accent); color: #fff; border-color: var(--accent);
+    }
+    button[aria-pressed="true"] {
+      background: #c0392b; color: #fff; border-color: #c0392b;
+    }
+
+    /*
+      Playground: absolute-ish shelves at staggered X/Y so walkers on one
+      platform collide with the side of a taller neighbour (climb / turn /
+      float), and gaps force tumbles.
+    */
+    .playground {
+      position: relative;
+      max-width: 56rem;
+      margin: 0 1rem 6rem;
+      min-height: 42rem;
+    }
+
+    .shelf {
+      position: absolute;
+      background: var(--card);
+      border-radius: 10px;
+      padding: .85rem 1rem;
+      box-shadow: 0 4px 14px rgba(0,0,0,.12);
+      border: 1px solid rgba(0,0,0,.06);
+    }
+    .shelf h2 {
+      margin: 0 0 .35rem;
+      font-size: 1rem;
+    }
+    .shelf p {
+      margin: 0;
+      font-size: .85rem;
+      line-height: 1.35;
+      color: #333;
+    }
+
+    /* Wide upper runway — feed into the tall tower’s left face */
+    .shelf-a {
+      left: 0; top: 0;
+      width: 42%;
+      min-height: 4.5rem;
+      background: #fff;
+    }
+
+    /* Tall tower — walkers from shelf-a / shelf-c hit its sides */
+    .shelf-tower {
+      left: 44%; top: 0;
+      width: 16%;
+      height: 18rem;
+      background: var(--tower);
+      color: #eef;
+      border: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .shelf-tower h2, .shelf-tower p { color: #e8f0ff; }
+
+    /* Mid platform to the right of the tower */
+    .shelf-b {
+      left: 62%; top: 2.5rem;
+      width: 36%;
+      min-height: 5rem;
+      background: #fff7e8;
+      border-top: 3px solid var(--shelf);
+    }
+
+    /* Lower left step — creates a drop from shelf-a */
+    .shelf-c {
+      left: 4%; top: 11rem;
+      width: 28%;
+      min-height: 4rem;
+      background: #e8f7ee;
+      border-top: 3px solid #2a9d8f;
+    }
+
+    /* Wide lower shelf under the tower gap — tumble target / climb up */
+    .shelf-d {
+      left: 28%; top: 16rem;
+      width: 48%;
+      min-height: 5.5rem;
+      background: #fff;
+    }
+
+    /* Right pillar standing on shelf-d — wall in the middle of a walk path */
+    .shelf-pillar {
+      left: 72%; top: 10rem;
+      width: 12%;
+      height: 11rem;
+      background: #5c4d7a;
+      color: #f5f0ff;
+      border: none;
+      padding-top: 1rem;
+    }
+    .shelf-pillar h2, .shelf-pillar p { color: #f5f0ff; }
+
+    /* Floating island high right */
+    .shelf-float {
+      left: 78%; top: 22rem;
+      width: 20%;
+      min-height: 3.5rem;
+      background: #f0e6ff;
+      border-top: 3px solid #9b5de5;
+    }
+
+    /* Bottom strip before footer */
+    .shelf-bottom {
+      left: 8%; top: 30rem;
+      width: 55%;
+      min-height: 4rem;
+      background: var(--shelf2);
+      border: none;
+      color: #123;
+    }
+
+    .hint {
+      max-width: 56rem;
+      margin: 0 1rem 1rem;
+      font-size: .9rem;
+      color: #345;
+      background: rgba(255,255,255,.55);
+      padding: .65rem 1rem;
+      border-radius: 8px;
+      border: 1px dashed #8ab;
+    }
+
     aside.panel {
       position: fixed; right: 1rem; bottom: 1rem; width: 14rem;
       background: #fff8e7; border: 2px solid #e0c060; border-radius: 10px;
       padding: 1rem; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+      z-index: 5;
     }
-    footer {
-      margin-top: 4rem; padding: 2rem; background: #d0d8e8; text-align: center;
+    aside.panel p { font-size: .85rem; margin: .4rem 0 0; }
+
+    footer.ground {
+      margin: 0;
+      padding: 2.5rem 1rem;
+      background: #6b7c93;
+      color: #eef3f8;
+      text-align: center;
+      box-shadow: 0 -4px 16px rgba(0,0,0,.15);
     }
+    footer.ground p { margin: 0; max-width: 36rem; margin-inline: auto; }
   </style>
 </head>
 <body>
-  <header>
+  <header class="banner">
     <h1>xpenguins-web</h1>
     <p>Penguins walk on DOM boxes the way classic xpenguins walked on windows.</p>
   </header>
-  <main>
-    <div class="toolbar">
-      <button class="primary" type="button" id="btn-start">Start</button>
-      <button type="button" id="btn-stop">Stop</button>
-      <button type="button" id="btn-more">More penguins</button>
-      <button type="button" id="btn-less">Fewer</button>
-      <button type="button" id="btn-squish">Toggle squish</button>
+
+  <div class="toolbar">
+    <button class="primary" type="button" id="btn-start">Start</button>
+    <button type="button" id="btn-stop">Stop</button>
+    <button type="button" id="btn-more">More penguins</button>
+    <button type="button" id="btn-less">Fewer</button>
+    <button type="button" id="btn-squish" aria-pressed="false">Toggle squish</button>
+  </div>
+
+  <p class="hint">
+    Staggered shelves and towers force real collisions: walk into a tall face to
+    <strong>climb</strong> or turn, step off an end to <strong>tumble</strong>,
+    land on lower decks. Scroll and resize — solids refresh live.
+  </p>
+
+  <div class="playground" aria-label="Penguin playground">
+    <div class="shelf shelf-a">
+      <h2>Runway</h2>
+      <p>Walk right into the tower wall.</p>
     </div>
-    <div class="card">
-      <h2>Ledge one</h2>
-      <p>Walkable top edge. Resize the window or scroll — solids refresh periodically.</p>
+    <div class="shelf shelf-tower">
+      <h2>Tower</h2>
+      <p>Climb me.</p>
     </div>
-    <div class="card">
-      <h2>Ledge two</h2>
-      <p>Another block to climb and tumble from. Nested content still counts as one box.</p>
-      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor.</p>
+    <div class="shelf shelf-b">
+      <h2>East deck</h2>
+      <p>Offset platform — drop or climb from the tower top.</p>
     </div>
-    <div class="card" style="height: 8rem;">
-      <h2>Tall card</h2>
-      <p>Sides can be climbed when a walker bumps into them.</p>
+    <div class="shelf shelf-c">
+      <h2>Step down</h2>
+      <p>Gap from the runway → tumble zone.</p>
     </div>
-  </main>
+    <div class="shelf shelf-d">
+      <h2>Mid shelf</h2>
+      <p>Long walk under the tower; pillar blocks the path.</p>
+    </div>
+    <div class="shelf shelf-pillar">
+      <h2>Pillar</h2>
+      <p>Wall</p>
+    </div>
+    <div class="shelf shelf-float">
+      <h2>Island</h2>
+      <p>Isolated ledge.</p>
+    </div>
+    <div class="shelf shelf-bottom">
+      <h2>Low shelf</h2>
+      <p>Last stop before the ground.</p>
+    </div>
+  </div>
+
   <aside class="panel" data-xpenguins-ignore>
     <strong>Controls</strong>
-    <p style="font-size:.9rem">This panel is ignored as a ledge (<code>data-xpenguins-ignore</code>).</p>
+    <p>This panel is ignored as a ledge (<code>data-xpenguins-ignore</code>).</p>
+    <p>With squish on, click a penguin.</p>
   </aside>
-  <footer>
-    <p>Footer shelf — classic “bottom of the screen” is always a floor too.</p>
+
+  <footer class="ground">
+    <p>Footer shelf — solid ground. The viewport floor is always walkable too.</p>
   </footer>
 
-  <!-- Bundle path absolute for scripts/serve.mjs; use ../dist/ for file:// -->
   <script src="../dist/xpenguins-web.js"></script>
   <script>
     (function () {
@@ -79,7 +267,7 @@
             'and open <code>http://127.0.0.1:8765/examples/index.html</code>.</p>');
           return;
         }
-        const count = { n: 10 };
+        const count = { n: 14 };
         let squish = false;
         document.getElementById('btn-start').onclick = function () {
           XPenguins.start({ count: count.n, squish: squish });
@@ -96,6 +284,7 @@
         document.getElementById('btn-squish').onclick = function () {
           squish = !squish;
           this.textContent = squish ? 'Squish: on' : 'Toggle squish';
+          this.setAttribute('aria-pressed', squish ? 'true' : 'false');
           if (XPenguins.isRunning() && typeof XPenguins.setSquish === 'function') {
             XPenguins.setSquish(squish);
           }
