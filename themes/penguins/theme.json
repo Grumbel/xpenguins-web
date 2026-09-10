@@ -1,0 +1,17 @@
+{
+  "name": "Penguins",
+  "delay": 60,
+  "types": {
+    "walker":  { "file": "walker.png",  "width": 30, "height": 30, "frames": 8, "directions": 2, "speed": 4 },
+    "faller":  { "file": "faller.png",  "width": 30, "height": 30, "frames": 8, "directions": 1, "speed": 3 },
+    "tumbler": { "file": "tumbler.png", "width": 30, "height": 30, "frames": 8, "directions": 1, "speed": 1, "acceleration": 1, "terminalVelocity": 8 },
+    "climber": { "file": "climber.png", "width": 30, "height": 30, "frames": 8, "directions": 2, "speed": 4 },
+    "floater": { "file": "floater.png", "width": 30, "height": 30, "frames": 8, "directions": 1, "speed": 3 },
+    "exit":    { "file": "bomber.png",  "width": 32, "height": 32, "frames": 16, "directions": 1, "speed": 0 },
+    "angel":   { "file": "angel.png",   "width": 46, "height": 30, "frames": 4, "directions": 1, "speed": 3 },
+    "splat":   { "file": "splat.png",   "width": 32, "height": 32, "frames": 12, "directions": 1, "speed": 0 },
+    "explosion": { "file": "explosion.png", "width": 64, "height": 64, "frames": 1, "directions": 1, "speed": 0 },
+    "action":  { "file": "reader.png",  "width": 30, "height": 30, "frames": 12, "directions": 1, "speed": 0, "loop": -4 }
+  },
+  "defaultCount": 8
+}

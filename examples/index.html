@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>xpenguins-web example</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #e8f0fe; color: #1a1a1a; }
+    header {
+      background: #1e3a5f; color: #fff; padding: 1.5rem 2rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    }
+    main { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+    .card {
+      background: #fff; border-radius: 12px; padding: 1.25rem 1.5rem;
+      margin: 1rem 0; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    .toolbar { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+    button {
+      font: inherit; padding: .45rem 1rem; border-radius: 8px; border: 1px solid #ccc;
+      background: #fff; cursor: pointer;
+    }
+    button.primary { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+    aside.panel {
+      position: fixed; right: 1rem; bottom: 1rem; width: 14rem;
+      background: #fff8e7; border: 2px solid #e0c060; border-radius: 10px;
+      padding: 1rem; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    }
+    footer {
+      margin-top: 4rem; padding: 2rem; background: #d0d8e8; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>xpenguins-web</h1>
+    <p>Penguins walk on DOM boxes the way classic xpenguins walked on windows.</p>
+  </header>
+  <main>
+    <div class="toolbar">
+      <button class="primary" type="button" id="btn-start">Start</button>
+      <button type="button" id="btn-stop">Stop</button>
+      <button type="button" id="btn-more">More penguins</button>
+      <button type="button" id="btn-less">Fewer</button>
+    </div>
+    <div class="card">
+      <h2>Ledge one</h2>
+      <p>Walkable top edge. Resize the window or scroll — solids refresh periodically.</p>
+    </div>
+    <div class="card">
+      <h2>Ledge two</h2>
+      <p>Another block to climb and tumble from. Nested content still counts as one box.</p>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor.</p>
+    </div>
+    <div class="card" style="height: 8rem;">
+      <h2>Tall card</h2>
+      <p>Sides can be climbed when a walker bumps into them.</p>
+    </div>
+  </main>
+  <aside class="panel" data-xpenguins-ignore>
+    <strong>Controls</strong>
+    <p style="font-size:.9rem">This panel is ignored as a ledge (<code>data-xpenguins-ignore</code>).</p>
+  </aside>
+  <footer>
+    <p>Footer shelf — classic “bottom of the screen” is always a floor too.</p>
+  </footer>
+
+  <!-- Production: single embedded bundle -->
+  <script src="../dist/xpenguins-web.js"></script>
+  <script>
+    const count = { n: 10 };
+    document.getElementById('btn-start').onclick = () => {
+      XPenguins.start({ count: count.n });
+    };
+    document.getElementById('btn-stop').onclick = () => XPenguins.stop();
+    document.getElementById('btn-more').onclick = () => {
+      count.n += 4;
+      if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
+    };
+    document.getElementById('btn-less').onclick = () => {
+      count.n = Math.max(0, count.n - 4);
+      if (XPenguins.isRunning()) XPenguins.setNumber(count.n);
+    };
+    // Auto-start for demo
+    XPenguins.start({ count: count.n });
+  </script>
+</body>
+</html>
