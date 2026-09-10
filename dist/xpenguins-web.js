@@ -5,49 +5,130 @@ const __XPENGUINS_EMBEDDED__ = {"theme":{"name":"Penguins","delay":60,"defaultCo
 /**
  * Collect walkable axis-aligned boxes from the live DOM.
  * Tops of these boxes are ledges; left/right edges can be climbed.
+ *
+ * Ledge quality prefers elements that look like surfaces (opaque
+ * background, border, box-shadow) and skips transparent wrappers and
+ * flush-to-viewport-top chrome (walking there draws sprites off-screen).
  */
 
 const SKIP_TAGS = new Set([
   'SCRIPT', 'STYLE', 'LINK', 'META', 'HEAD', 'BR', 'WBR', 'NOSCRIPT',
+  'SVG', 'PATH', 'CANVAS', 'VIDEO', 'AUDIO', 'IFRAME',
 ]);
+
+/** Parse CSS color alpha in [0,1]; unknown → 1. */
+function colorAlpha(cssColor) {
+  if (!cssColor || cssColor === 'transparent') return 0;
+  const c = cssColor.trim().toLowerCase();
+  if (c === 'transparent') return 0;
+  let m = c.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/);
+  if (m) return m[4] !== undefined ? Number(m[4]) : 1;
+  m = c.match(/^rgba?\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/);
+  if (m) {
+    if (m[4] === undefined) return 1;
+    return m[4].endsWith('%') ? Number(m[4]) / 100 : Number(m[4]);
+  }
+  m = c.match(/^#([0-9a-f]{4})$/i);
+  if (m) return parseInt(m[1][3] + m[1][3], 16) / 255;
+  m = c.match(/^#([0-9a-f]{8})$/i);
+  if (m) return parseInt(m[1].slice(6, 8), 16) / 255;
+  /* named colors / #rgb / #rrggbb → treat as opaque */
+  if (c.startsWith('#') || /^[a-z]+$/.test(c)) return 1;
+  return 1;
+}
+
+function borderTopPx(st) {
+  if (st.borderTopStyle === 'none' || st.borderTopStyle === '') return 0;
+  return parseFloat(st.borderTopWidth) || 0;
+}
+
+function hasBoxShadow(st) {
+  const s = st.boxShadow;
+  return !!(s && s !== 'none');
+}
+
+/**
+ * Visual weight for use as a walkable ledge. Higher is better.
+ * Transparent wrappers score 0 and are dropped.
+ */
+function ledgeScore(st, rect, vw, vh) {
+  let score = 0;
+  const bgA = colorAlpha(st.backgroundColor);
+  if (bgA >= 0.4) score += 3;
+  else if (bgA >= 0.15) score += 1;
+
+  if (st.backgroundImage && st.backgroundImage !== 'none') score += 2;
+
+  const bt = borderTopPx(st);
+  if (bt >= 1) score += 2;
+  else {
+    const bw = parseFloat(st.borderWidth) || 0;
+    if (bw >= 1 && st.borderStyle !== 'none') score += 1;
+  }
+
+  if (hasBoxShadow(st)) score += 2;
+
+  /* outline can mark cards */
+  if (st.outlineStyle && st.outlineStyle !== 'none' && (parseFloat(st.outlineWidth) || 0) >= 1) {
+    score += 1;
+  }
+
+  /* Huge near-fullscreen nodes are wallpaper, not ledges */
+  if (rect.width > vw * 0.95 && rect.height > vh * 0.85) score = 0;
+
+  return score;
+}
 
 /**
  * @param {object} [opts]
  * @param {number} [opts.minWidth=40]
  * @param {number} [opts.minHeight=12]
+ * @param {number} [opts.minScore=2]  minimum ledgeScore to keep
+ * @param {number} [opts.minTop=12]   ignore tops flush with viewport top
  * @param {Element} [opts.root=document.body]
- * @returns {{x:number,y:number,w:number,h:number}[]}
+ * @returns {{x:number,y:number,w:number,h:number,score?:number}[]}
  */
 function collectSolids(opts = {}) {
   const minWidth = opts.minWidth ?? 40;
   const minHeight = opts.minHeight ?? 12;
+  const minScore = opts.minScore ?? 2;
+  const minTop = opts.minTop ?? 12;
   const root = opts.root ?? document.body;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const out = [];
+  const candidates = [];
 
-  // Viewport floor — classic “bottom of the screen”
-  out.push({ x: 0, y: vh - 2, w: vw, h: 4, floor: true });
+  /* Viewport floor — classic “bottom of the screen” */
+  candidates.push({ x: 0, y: vh - 2, w: vw, h: 4, floor: true, score: 99 });
+
+  if (!root) return candidates;
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   let el = walker.currentNode;
   while (el) {
-    if (el === root || !SKIP_TAGS.has(el.tagName)) {
-      if (el.tagName !== 'HTML' && el.tagName !== 'BODY' &&
-          !el.hasAttribute('data-xpenguins-ignore')) {
-        const st = window.getComputedStyle(el);
-        if (st.display !== 'none' && st.visibility !== 'hidden' &&
-            st.opacity !== '0') {
-          const r = el.getBoundingClientRect();
-          if (r.width >= minWidth && r.height >= minHeight &&
-              r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw) {
-            // Reject near full-viewport wallpaper-like nodes
-            if (!(r.width > vw * 0.95 && r.height > vh * 0.9)) {
-              out.push({
+    if (el !== root &&
+        !SKIP_TAGS.has(el.tagName) &&
+        el.tagName !== 'HTML' && el.tagName !== 'BODY' &&
+        !el.hasAttribute('data-xpenguins-ignore')) {
+      const st = window.getComputedStyle(el);
+      if (st.display !== 'none' && st.visibility !== 'hidden' &&
+          Number(st.opacity) !== 0) {
+        const r = el.getBoundingClientRect();
+        if (r.width >= minWidth && r.height >= minHeight &&
+            r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw) {
+          /*
+           * Tops flush with the viewport put walkers at y≈-height (mostly
+           * off-screen). Skip those tops; fallers pass through into content.
+           */
+          if (r.top >= minTop) {
+            const score = ledgeScore(st, r, vw, vh);
+            if (score >= minScore) {
+              candidates.push({
                 x: r.left,
                 y: r.top,
                 w: r.width,
                 h: r.height,
+                score,
               });
             }
           }
@@ -56,7 +137,29 @@ function collectSolids(opts = {}) {
     }
     el = walker.nextNode();
   }
-  return out;
+
+  return dedupeLedges(candidates);
+}
+
+/**
+ * Drop nested / nearly identical tops — keep the higher-scoring, wider ledge.
+ */
+function dedupeLedges(solids) {
+  const floors = solids.filter((s) => s.floor);
+  const rest = solids.filter((s) => !s.floor)
+    .sort((a, b) => (b.score - a.score) || (b.w - a.w));
+
+  const kept = [];
+  for (const s of rest) {
+    const dominates = kept.some((k) => {
+      const sameTop = Math.abs(k.y - s.y) < 6;
+      const overlapX = Math.min(k.x + k.w, s.x + s.w) - Math.max(k.x, s.x);
+      const minW = Math.min(k.w, s.w);
+      return sameTop && minW > 0 && overlapX > minW * 0.6;
+    });
+    if (!dominates) kept.push(s);
+  }
+  return floors.concat(kept);
 }
 
 /** Foot resting on a ledge? */
@@ -77,18 +180,15 @@ function findSupport(solids, x, y, w, h, slop = 3) {
 /**
  * True landing: feet crossed a solid top this frame (prevFoot above, newFoot
  * at/below). Prevents fallers spawned at y=-height from instantly "landing"
- * on solids whose top is ≈0 (page headers flush with the viewport).
- *
- * @returns {object|null} the solid landed on (highest top that was crossed)
+ * on solids whose top is ≈0.
  */
 function landOnLedge(solids, x, prevFoot, newFoot, w, slop = 4) {
-  if (newFoot <= prevFoot) return null; /* not falling */
+  if (newFoot <= prevFoot) return null;
   const cx = x + w / 2;
   let best = null;
   for (const s of solids) {
     if (cx < s.x || cx > s.x + s.w) continue;
     const top = s.y;
-    /* Feet were strictly above the ledge, then reach or pass it. */
     if (prevFoot < top - 0.5 && newFoot >= top - slop) {
       if (!best || top < best.y) best = s;
     }
@@ -109,7 +209,7 @@ function hitCeiling(solids, x, y, w, h) {
   return null;
 }
 
-/** Horizontal block in walk direction. */
+/** Horizontal block in walk direction. dir > 0 probes right face. */
 function blockedSide(solids, x, y, w, h, dir) {
   const probeX = dir > 0 ? x + w + 1 : x - 1;
   const midY = y + h * 0.5;
@@ -120,6 +220,18 @@ function blockedSide(solids, x, y, w, h, dir) {
     if (dir < 0 && probeX <= s.x + s.w && probeX >= s.x + s.w - 4) return s;
   }
   return null;
+}
+
+/**
+ * Classic step-up: is the path clear a few pixels up and forward?
+ * Used when a walker is blocked at foot level.
+ */
+function canStepUp(solids, x, y, w, h, dir, rise = 8) {
+  const nx = x + (dir > 0 ? 2 : -2);
+  const ny = y - rise;
+  if (blockedSide(solids, nx, ny, w, h, dir)) return false;
+  /* Still need something under the new feet, or empty air is ok for one step */
+  return true;
 }
 
 /**
@@ -190,7 +302,6 @@ function createToon(vw, theme, genus) {
     x: rand(Math.max(1, vw - fall.width)),
     /* Fully above the screen (y + height === 0), same as xpenguins-ng. */
     y: -fall.height,
-    /* Classic faller drifts slightly while falling. */
     vx: dirSign(dir),
     vy: fall.speed,
     dir,
@@ -201,13 +312,23 @@ function createToon(vw, theme, genus) {
   };
 }
 
+/**
+ * Change type; keep feet planted when height differs (ballooner → walker).
+ */
 function setType(t, type, theme, keepDir) {
+  const prev = typeDef(theme, t.genus, t.type);
+  const prevH = prev && prev.height ? prev.height : 0;
   t.type = type;
   const def = typeDef(theme, t.genus, type);
   t.frame = 0;
   t.frameAcc = 0;
   const dirs = def.directions || 1;
   t.dir = ((t.dir | 0) % dirs + dirs) % dirs;
+
+  if (prevH && def.height && prevH !== def.height) {
+    /* Keep feet at the same Y when sprite height changes. */
+    t.y += prevH - def.height;
+  }
 
   if (type === Type.FALLER) {
     t.vx = dirSign(t.dir);
@@ -279,15 +400,15 @@ function stepToon(t, solids, theme, vw, vh, opts) {
     if (loop < 0 && rand(-loop) === 0) {
       setType(t, Type.WALKER, theme, true);
     }
-    /* Still need ground under feet or they tumble. */
     const support = findSupport(solids, t.x, t.y, w, h, 5);
     if (!support) {
       setType(t, Type.TUMBLER, theme, true);
+    } else {
+      t.y = support.y - h;
     }
     return;
   }
 
-  /* Acceleration before integrating position. */
   if (t.type === Type.TUMBLER || t.type === Type.FALLER) {
     const term = def.terminalVelocity || (t.type === Type.FALLER ? 12 : 8);
     const acc = def.acceleration != null ? def.acceleration : (t.type === Type.TUMBLER ? 1 : 0);
@@ -307,7 +428,6 @@ function stepToon(t, solids, theme, vw, vh, opts) {
   t.x += t.vx;
   t.y += t.vy;
 
-  /* Soft wrap horizontally so toons re-enter from the opposite edge. */
   if (t.x < -w) t.x = vw;
   if (t.x > vw) t.x = -w;
 
@@ -318,11 +438,6 @@ function stepToon(t, solids, theme, vw, vh, opts) {
       t.vy = Math.abs(typeDef(theme, t.genus, Type.FALLER).speed);
       return;
     }
-    /*
-     * Land only when the feet cross a ledge top this frame (falling onto it).
-     * Avoids the spawn-at-y=-height false positive against solids with top≈0
-     * that glued every faller to the top of the viewport.
-     */
     const landed = landOnLedge(solids, t.x, prevFoot, t.y + h, w, 6);
     if (landed) {
       t.y = landed.y - h;
@@ -331,6 +446,9 @@ function stepToon(t, solids, theme, vw, vh, opts) {
         return;
       }
       makeWalker(t, theme);
+      /* After height adjust in setType, re-snap feet to ledge. */
+      const wd = typeDef(theme, t.genus, t.type);
+      t.y = landed.y - wd.height;
       return;
     }
     if (t.y > vh + 40) Object.assign(t, createToon(vw, theme));
@@ -344,13 +462,21 @@ function stepToon(t, solids, theme, vw, vh, opts) {
       return;
     }
     t.y = support.y - h;
-    /* Probe in the direction of travel (dir 0 left → -1, dir 1 right → +1). */
     const side = dirSign(t.dir);
     const block = blockedSide(solids, t.x, t.y, w, h, side);
     if (block) {
+      /* Classic: try a small step-up onto a higher ledge before turning. */
+      const rise = 8;
+      if (canStepUp(solids, t.x, t.y, w, h, side, rise)) {
+        const upSupport = findSupport(solids, t.x + side * 3, t.y - rise, w, h, 6);
+        if (upSupport && upSupport.y < support.y - 2) {
+          t.y = upSupport.y - h;
+          t.x += side * Math.min(4, Math.abs(t.vx) || 2);
+          return;
+        }
+      }
       const r = rand(8);
       if (r < 2 && typeDef(theme, t.genus, Type.CLIMBER)) {
-        /* Climb the face we hit. */
         t.climbSide = side;
         setType(t, Type.CLIMBER, theme, true);
         t.x = side > 0 ? block.x - w : block.x + block.w;
@@ -382,7 +508,6 @@ function stepToon(t, solids, theme, vw, vh, opts) {
       return;
     }
     t.x = side > 0 ? block.x - w : block.x + block.w;
-    /* Reached the top of the climbed solid → walk away from the face. */
     if (t.y + h <= block.y + 2) {
       t.y = block.y - h;
       t.dir = side > 0 ? 1 : 0;
@@ -492,7 +617,9 @@ const EMBEDDED = __XPENGUINS_EMBEDDED__;
  *   start(options?)
  *   stop()
  *   setNumber(n)
+ *   setSquish(on)
  *   isRunning()
+ *   isSquish()
  */
 
 
@@ -509,6 +636,8 @@ let solids = [];
 let lastSolids = 0;
 let lastFrame = 0;
 let observers = [];
+/** Bumps on every stop/start so async exit animations cannot clobber a new run. */
+let session = 0;
 let opts = {
   count: 8,
   blood: true,
@@ -516,6 +645,8 @@ let opts = {
   squish: false,
   solidRefreshMs: 400,
   respectReducedMotion: true,
+  minTop: 12,
+  minScore: 2,
 };
 
 function spriteKey(def) {
@@ -538,12 +669,15 @@ function loadImages(map) {
 }
 
 function refreshSolids() {
-  solids = collectSolids();
+  solids = collectSolids({
+    minTop: opts.minTop,
+    minScore: opts.minScore,
+  });
   lastSolids = performance.now();
 }
 
 function onPointerDown(ev) {
-  if (!opts.squish || !theme) return;
+  if (!opts.squish || !theme || !running) return;
   const px = ev.clientX;
   const py = ev.clientY;
   for (let i = toons.length - 1; i >= 0; i--) {
@@ -553,6 +687,13 @@ function onPointerDown(ev) {
       break;
     }
   }
+}
+
+function bindSquishListener(on) {
+  if (!overlay) return;
+  overlay.canvas.removeEventListener('pointerdown', onPointerDown);
+  if (on) overlay.canvas.addEventListener('pointerdown', onPointerDown);
+  overlay.setInteractive(!!on);
 }
 
 function drawAll() {
@@ -617,8 +758,28 @@ function detachObservers() {
   while (observers.length) observers.pop()();
 }
 
+/**
+ * Tear down overlay immediately (cancel any in-flight exit animation).
+ */
+function destroyOverlayNow() {
+  if (!overlay) return;
+  overlay.canvas.removeEventListener('pointerdown', onPointerDown);
+  overlay.destroy();
+  overlay = null;
+}
+
 async function start(userOpts = {}) {
-  if (running) stop();
+  /* Cancel previous session completely before starting a new one. */
+  if (running || overlay) {
+    session += 1;
+    running = false;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    detachObservers();
+    destroyOverlayNow();
+    toons = [];
+  }
+
   opts = { ...opts, ...userOpts };
 
   if (opts.respectReducedMotion !== false &&
@@ -634,14 +795,22 @@ async function start(userOpts = {}) {
   }
   theme = pack.theme;
   images = await loadImages(pack.images);
+
+  const mySession = session;
   overlay = createOverlay({ interactive: !!opts.squish });
-  if (opts.squish) {
-    overlay.canvas.addEventListener('pointerdown', onPointerDown);
-  }
+  bindSquishListener(!!opts.squish);
 
   const n = opts.count ?? theme.defaultCount ?? 8;
+  opts.count = n;
   toons = [];
   for (let i = 0; i < n; i++) toons.push(createToon(window.innerWidth, theme));
+
+  if (mySession !== session) {
+    /* Superseded by another start/stop while images loaded. */
+    destroyOverlayNow();
+    toons = [];
+    return api;
+  }
 
   running = true;
   refreshSolids();
@@ -653,23 +822,22 @@ async function start(userOpts = {}) {
 
 function stop() {
   if (!running && !overlay) return;
+  const mySession = ++session;
   running = false;
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
   detachObservers();
 
   if (overlay && theme) {
-    if (opts.squish) {
-      overlay.canvas.removeEventListener('pointerdown', onPointerDown);
-    }
+    bindSquishListener(false);
     for (const t of toons) terminateToon(t, theme);
-    overlay.setInteractive(false);
     let frames = 0;
     const finish = () => {
+      if (mySession !== session) return; /* superseded */
       frames++;
       refreshSolids();
       for (const t of toons) {
-        stepToon(t, solids, theme, innerWidth, innerHeight, opts);
+        stepToon(t, solids, theme, window.innerWidth, window.innerHeight, opts);
       }
       drawAll();
       const dying = toons.some(
@@ -678,16 +846,15 @@ function stop() {
       );
       if (frames < 48 && dying) {
         setTimeout(finish, theme.delay || 60);
-      } else if (overlay) {
-        overlay.destroy();
-        overlay = null;
+      } else if (mySession === session) {
+        destroyOverlayNow();
         toons = [];
+        theme = null;
       }
     };
     finish();
-  } else if (overlay) {
-    overlay.destroy();
-    overlay = null;
+  } else {
+    destroyOverlayNow();
     toons = [];
   }
 }
@@ -695,22 +862,43 @@ function stop() {
 function setNumber(n) {
   opts.count = Math.max(0, n | 0);
   if (!running || !theme) return;
-  while (toons.length < opts.count) toons.push(createToon(innerWidth, theme));
+  while (toons.length < opts.count) toons.push(createToon(window.innerWidth, theme));
   while (toons.length > opts.count) toons.pop();
+}
+
+/**
+ * Enable or disable click-to-squish without restarting the animation.
+ * Fixes the example “Toggle squish” control that previously stop/start raced.
+ */
+function setSquish(on) {
+  opts.squish = !!on;
+  if (!overlay) return opts.squish;
+  bindSquishListener(opts.squish);
+  return opts.squish;
 }
 
 function isRunning() {
   return running;
 }
 
+function isSquish() {
+  return !!opts.squish;
+}
+
 const api = {
-  start, stop, setNumber, isRunning, collectSolids,
+  start,
+  stop,
+  setNumber,
+  setSquish,
+  isRunning,
+  isSquish,
+  collectSolids,
 };
 
 
 
 
-const XPenguins = { start, stop, setNumber, isRunning, collectSolids };
+const XPenguins = { start, stop, setNumber, setSquish, isRunning, isSquish, collectSolids };
 global.XPenguins = XPenguins;
 if (typeof global.window !== 'undefined') global.window.XPenguins = XPenguins;
 if (typeof module !== 'undefined' && module.exports) module.exports = XPenguins;

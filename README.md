@@ -42,11 +42,18 @@ Drop onto any page:
 | `XPenguins.start({ count, blood, angels, squish })` | Spawn overlay + toons |
 | `XPenguins.stop()` | Exit animation then remove overlay |
 | `XPenguins.setNumber(n)` | Grow/shrink population |
+| `XPenguins.setSquish(on)` | Toggle click-to-squish live (no restart) |
 | `XPenguins.isRunning()` | Boolean |
+| `XPenguins.isSquish()` | Whether squish mode is on |
 
 Options: `squish: true` enables click-to-squash (canvas captures pointers).
 `respectReducedMotion: true` (default) skips start when the user prefers reduced motion.
 Solids refresh on scroll/resize and via `ResizeObserver` / `MutationObserver`.
+
+Ledges are scored from **visible surfaces** (opaque background, border,
+box-shadow). Transparent wrappers are skipped, and tops flush with the
+viewport (`top < 12px`) are ignored so toons do not walk on off-screen
+chrome. Override with `start({ minTop, minScore })`.
 
 Mark elements that should **not** be ledges:
 

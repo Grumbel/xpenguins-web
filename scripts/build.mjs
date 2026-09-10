@@ -71,7 +71,7 @@ ${toon}
 ${render}
 const EMBEDDED = __XPENGUINS_EMBEDDED__;
 ${index}
-const XPenguins = { start, stop, setNumber, isRunning, collectSolids };
+const XPenguins = { start, stop, setNumber, setSquish, isRunning, isSquish, collectSolids };
 global.XPenguins = XPenguins;
 if (typeof global.window !== 'undefined') global.window.XPenguins = XPenguins;
 if (typeof module !== 'undefined' && module.exports) module.exports = XPenguins;

@@ -5,7 +5,9 @@
  *   start(options?)
  *   stop()
  *   setNumber(n)
+ *   setSquish(on)
  *   isRunning()
+ *   isSquish()
  */
 
 import { collectSolids } from './solids.js';
@@ -29,6 +31,8 @@ let solids = [];
 let lastSolids = 0;
 let lastFrame = 0;
 let observers = [];
+/** Bumps on every stop/start so async exit animations cannot clobber a new run. */
+let session = 0;
 let opts = {
   count: 8,
   blood: true,
@@ -36,6 +40,8 @@ let opts = {
   squish: false,
   solidRefreshMs: 400,
   respectReducedMotion: true,
+  minTop: 12,
+  minScore: 2,
 };
 
 function spriteKey(def) {
@@ -58,12 +64,15 @@ function loadImages(map) {
 }
 
 function refreshSolids() {
-  solids = collectSolids();
+  solids = collectSolids({
+    minTop: opts.minTop,
+    minScore: opts.minScore,
+  });
   lastSolids = performance.now();
 }
 
 function onPointerDown(ev) {
-  if (!opts.squish || !theme) return;
+  if (!opts.squish || !theme || !running) return;
   const px = ev.clientX;
   const py = ev.clientY;
   for (let i = toons.length - 1; i >= 0; i--) {
@@ -73,6 +82,13 @@ function onPointerDown(ev) {
       break;
     }
   }
+}
+
+function bindSquishListener(on) {
+  if (!overlay) return;
+  overlay.canvas.removeEventListener('pointerdown', onPointerDown);
+  if (on) overlay.canvas.addEventListener('pointerdown', onPointerDown);
+  overlay.setInteractive(!!on);
 }
 
 function drawAll() {
@@ -137,8 +153,28 @@ function detachObservers() {
   while (observers.length) observers.pop()();
 }
 
+/**
+ * Tear down overlay immediately (cancel any in-flight exit animation).
+ */
+function destroyOverlayNow() {
+  if (!overlay) return;
+  overlay.canvas.removeEventListener('pointerdown', onPointerDown);
+  overlay.destroy();
+  overlay = null;
+}
+
 async function start(userOpts = {}) {
-  if (running) stop();
+  /* Cancel previous session completely before starting a new one. */
+  if (running || overlay) {
+    session += 1;
+    running = false;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    detachObservers();
+    destroyOverlayNow();
+    toons = [];
+  }
+
   opts = { ...opts, ...userOpts };
 
   if (opts.respectReducedMotion !== false &&
@@ -154,14 +190,22 @@ async function start(userOpts = {}) {
   }
   theme = pack.theme;
   images = await loadImages(pack.images);
+
+  const mySession = session;
   overlay = createOverlay({ interactive: !!opts.squish });
-  if (opts.squish) {
-    overlay.canvas.addEventListener('pointerdown', onPointerDown);
-  }
+  bindSquishListener(!!opts.squish);
 
   const n = opts.count ?? theme.defaultCount ?? 8;
+  opts.count = n;
   toons = [];
   for (let i = 0; i < n; i++) toons.push(createToon(window.innerWidth, theme));
+
+  if (mySession !== session) {
+    /* Superseded by another start/stop while images loaded. */
+    destroyOverlayNow();
+    toons = [];
+    return api;
+  }
 
   running = true;
   refreshSolids();
@@ -173,23 +217,22 @@ async function start(userOpts = {}) {
 
 function stop() {
   if (!running && !overlay) return;
+  const mySession = ++session;
   running = false;
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
   detachObservers();
 
   if (overlay && theme) {
-    if (opts.squish) {
-      overlay.canvas.removeEventListener('pointerdown', onPointerDown);
-    }
+    bindSquishListener(false);
     for (const t of toons) terminateToon(t, theme);
-    overlay.setInteractive(false);
     let frames = 0;
     const finish = () => {
+      if (mySession !== session) return; /* superseded */
       frames++;
       refreshSolids();
       for (const t of toons) {
-        stepToon(t, solids, theme, innerWidth, innerHeight, opts);
+        stepToon(t, solids, theme, window.innerWidth, window.innerHeight, opts);
       }
       drawAll();
       const dying = toons.some(
@@ -198,16 +241,15 @@ function stop() {
       );
       if (frames < 48 && dying) {
         setTimeout(finish, theme.delay || 60);
-      } else if (overlay) {
-        overlay.destroy();
-        overlay = null;
+      } else if (mySession === session) {
+        destroyOverlayNow();
         toons = [];
+        theme = null;
       }
     };
     finish();
-  } else if (overlay) {
-    overlay.destroy();
-    overlay = null;
+  } else {
+    destroyOverlayNow();
     toons = [];
   }
 }
@@ -215,17 +257,40 @@ function stop() {
 function setNumber(n) {
   opts.count = Math.max(0, n | 0);
   if (!running || !theme) return;
-  while (toons.length < opts.count) toons.push(createToon(innerWidth, theme));
+  while (toons.length < opts.count) toons.push(createToon(window.innerWidth, theme));
   while (toons.length > opts.count) toons.pop();
+}
+
+/**
+ * Enable or disable click-to-squish without restarting the animation.
+ * Fixes the example “Toggle squish” control that previously stop/start raced.
+ */
+function setSquish(on) {
+  opts.squish = !!on;
+  if (!overlay) return opts.squish;
+  bindSquishListener(opts.squish);
+  return opts.squish;
 }
 
 function isRunning() {
   return running;
 }
 
+function isSquish() {
+  return !!opts.squish;
+}
+
 const api = {
-  start, stop, setNumber, isRunning, collectSolids,
+  start,
+  stop,
+  setNumber,
+  setSquish,
+  isRunning,
+  isSquish,
+  collectSolids,
 };
 
-export { start, stop, setNumber, isRunning, collectSolids };
+export {
+  start, stop, setNumber, setSquish, isRunning, isSquish, collectSolids,
+};
 export default api;

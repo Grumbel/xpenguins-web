@@ -7,7 +7,9 @@
  * Velocity for walkers: speed * (2*dir - 1)
  */
 
-import { findSupport, blockedSide, hitCeiling, landOnLedge } from './solids.js';
+import {
+  findSupport, blockedSide, hitCeiling, landOnLedge, canStepUp,
+} from './solids.js';
 
 export const Type = {
   FALLER: 'faller',
@@ -67,7 +69,6 @@ export function createToon(vw, theme, genus) {
     x: rand(Math.max(1, vw - fall.width)),
     /* Fully above the screen (y + height === 0), same as xpenguins-ng. */
     y: -fall.height,
-    /* Classic faller drifts slightly while falling. */
     vx: dirSign(dir),
     vy: fall.speed,
     dir,
@@ -78,13 +79,23 @@ export function createToon(vw, theme, genus) {
   };
 }
 
+/**
+ * Change type; keep feet planted when height differs (ballooner → walker).
+ */
 function setType(t, type, theme, keepDir) {
+  const prev = typeDef(theme, t.genus, t.type);
+  const prevH = prev && prev.height ? prev.height : 0;
   t.type = type;
   const def = typeDef(theme, t.genus, type);
   t.frame = 0;
   t.frameAcc = 0;
   const dirs = def.directions || 1;
   t.dir = ((t.dir | 0) % dirs + dirs) % dirs;
+
+  if (prevH && def.height && prevH !== def.height) {
+    /* Keep feet at the same Y when sprite height changes. */
+    t.y += prevH - def.height;
+  }
 
   if (type === Type.FALLER) {
     t.vx = dirSign(t.dir);
@@ -156,15 +167,15 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
     if (loop < 0 && rand(-loop) === 0) {
       setType(t, Type.WALKER, theme, true);
     }
-    /* Still need ground under feet or they tumble. */
     const support = findSupport(solids, t.x, t.y, w, h, 5);
     if (!support) {
       setType(t, Type.TUMBLER, theme, true);
+    } else {
+      t.y = support.y - h;
     }
     return;
   }
 
-  /* Acceleration before integrating position. */
   if (t.type === Type.TUMBLER || t.type === Type.FALLER) {
     const term = def.terminalVelocity || (t.type === Type.FALLER ? 12 : 8);
     const acc = def.acceleration != null ? def.acceleration : (t.type === Type.TUMBLER ? 1 : 0);
@@ -184,7 +195,6 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   t.x += t.vx;
   t.y += t.vy;
 
-  /* Soft wrap horizontally so toons re-enter from the opposite edge. */
   if (t.x < -w) t.x = vw;
   if (t.x > vw) t.x = -w;
 
@@ -195,11 +205,6 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
       t.vy = Math.abs(typeDef(theme, t.genus, Type.FALLER).speed);
       return;
     }
-    /*
-     * Land only when the feet cross a ledge top this frame (falling onto it).
-     * Avoids the spawn-at-y=-height false positive against solids with top≈0
-     * that glued every faller to the top of the viewport.
-     */
     const landed = landOnLedge(solids, t.x, prevFoot, t.y + h, w, 6);
     if (landed) {
       t.y = landed.y - h;
@@ -208,6 +213,9 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         return;
       }
       makeWalker(t, theme);
+      /* After height adjust in setType, re-snap feet to ledge. */
+      const wd = typeDef(theme, t.genus, t.type);
+      t.y = landed.y - wd.height;
       return;
     }
     if (t.y > vh + 40) Object.assign(t, createToon(vw, theme));
@@ -221,13 +229,21 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
       return;
     }
     t.y = support.y - h;
-    /* Probe in the direction of travel (dir 0 left → -1, dir 1 right → +1). */
     const side = dirSign(t.dir);
     const block = blockedSide(solids, t.x, t.y, w, h, side);
     if (block) {
+      /* Classic: try a small step-up onto a higher ledge before turning. */
+      const rise = 8;
+      if (canStepUp(solids, t.x, t.y, w, h, side, rise)) {
+        const upSupport = findSupport(solids, t.x + side * 3, t.y - rise, w, h, 6);
+        if (upSupport && upSupport.y < support.y - 2) {
+          t.y = upSupport.y - h;
+          t.x += side * Math.min(4, Math.abs(t.vx) || 2);
+          return;
+        }
+      }
       const r = rand(8);
       if (r < 2 && typeDef(theme, t.genus, Type.CLIMBER)) {
-        /* Climb the face we hit. */
         t.climbSide = side;
         setType(t, Type.CLIMBER, theme, true);
         t.x = side > 0 ? block.x - w : block.x + block.w;
@@ -259,7 +275,6 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
       return;
     }
     t.x = side > 0 ? block.x - w : block.x + block.w;
-    /* Reached the top of the climbed solid → walk away from the face. */
     if (t.y + h <= block.y + 2) {
       t.y = block.y - h;
       t.dir = side > 0 ? 1 : 0;

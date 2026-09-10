@@ -95,9 +95,9 @@
         };
         document.getElementById('btn-squish').onclick = function () {
           squish = !squish;
-          if (XPenguins.isRunning()) {
-            XPenguins.stop();
-            setTimeout(function () { XPenguins.start({ count: count.n, squish: squish }); }, 150);
+          this.textContent = squish ? 'Squish: on' : 'Toggle squish';
+          if (XPenguins.isRunning() && typeof XPenguins.setSquish === 'function') {
+            XPenguins.setSquish(squish);
           }
         };
         XPenguins.start({ count: count.n, squish: squish });

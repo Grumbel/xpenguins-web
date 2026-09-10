@@ -44,6 +44,17 @@
       - `nix run .#demo` — force rebuild then serve
       - `nix run .#build` / `nix run .#test`
 
+## Done (ledges + squish)
+
+- [x] Scored ledges: opaque bg / border / box-shadow; skip transparent wraps
+- [x] Ignore flush viewport-top tops (`minTop`, default 12) — no off-screen walkers
+- [x] Dedupe nested same-top boxes
+- [x] `setSquish(on)` / `isSquish()` — live toggle without stop/start race
+- [x] Session token so async exit cannot destroy a new run
+- [x] Keep feet planted when sprite height changes (ballooner → walker)
+- [x] Walker step-up attempt before turn/climb
+- [x] Example uses `setSquish`; build exports new API
+
 ## Next
 
 - [ ] Additional themes (Big Penguins, Turtles, …) as selectable packs
@@ -56,19 +67,13 @@
 
 ## Handoff notes (2026-09-10)
 
-**Tip focus:** fix reported bugs — falling stuck at top, skateboard wrong
-direction, odd left-side falls.
-
-Root causes were inverted walker velocity vs sprite rows, and
-`findSupport` treating “feet near any top edge” as a land even at spawn.
-
-Verify with:
+**Tip:** ledge scoring + `setSquish`. Header flush with the top is no longer
+a walkable top (sprites would sit at y≈-height). Cards/footer with real
+surfaces remain ledges.
 
 ```bash
-node scripts/build.mjs
-node scripts/serve.mjs
-# open http://127.0.0.1:8765/examples/index.html → Start
+git pull …/xpenguins-web-003-….bundle HEAD
+node scripts/build.mjs && node scripts/serve.mjs
 ```
 
-Penguins should fall from above the header, land on cards / footer, and
-skateboarders should face the way they move.
+Toggle Squish should switch pointer capture immediately without restarting.
