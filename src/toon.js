@@ -126,9 +126,6 @@ function setType(t, type, theme, keepDir) {
 
 function makeWalker(t, theme) {
   setType(t, Type.WALKER, theme, true);
-  if (typeDef(theme, t.genus, Type.ACTION) && rand(100) === 0) {
-    setType(t, Type.ACTION, theme, true);
-  }
 }
 
 export function stepToon(t, solids, theme, vw, vh, opts) {
@@ -178,11 +175,14 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   }
 
   if (t.type === Type.ACTION) {
+    /* Classic: decide whether to stop when a full strip loop completes (frame→0). */
     const loop = def.loop != null ? def.loop : -4;
-    if (loop < 0) {
-      if (rand(-loop) === 0) setType(t, Type.WALKER, theme, true);
-    } else if ((t.cycle | 0) >= loop) {
-      setType(t, Type.WALKER, theme, true);
+    if (t.frame === 0 && t.cycle > 0) {
+      if (loop < 0) {
+        if (rand(-loop) === 0) setType(t, Type.WALKER, theme, true);
+      } else if ((t.cycle | 0) >= loop) {
+        setType(t, Type.WALKER, theme, true);
+      }
     }
     const support = findSupport(solids, t.x, t.y, w, h, 5);
     if (!support) {
@@ -246,6 +246,11 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
       return;
     }
     t.y = support.y - h;
+    /* Classic: ~1/100 frames a grounded walker starts action0 (reader / digger). */
+    if (typeDef(theme, t.genus, Type.ACTION) && rand(100) === 0) {
+      setType(t, Type.ACTION, theme, true);
+      return;
+    }
     const side = dirSign(t.dir);
     const block = blockedSide(solids, t.x, t.y, w, h, side);
     if (block) {
