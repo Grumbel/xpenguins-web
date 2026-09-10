@@ -164,5 +164,19 @@ assert(typeDef(theme, skater, 'faller').file === 'ballooner.png', 'skater faller
 assert(typeDef(theme, skater, 'walker').frames === 1, 'skater walker single frame');
 assert(typeDef(theme, theme.genera[0], 'walker').file === 'walker.png', 'normal walker');
 
+
+assert(typeDef(theme, skater, 'floater').file === 'superpenguin.png',
+  'skater floater is superpenguin (superman)');
+assert(typeDef(theme, skater, 'action0').file === 'digger.png', 'skater action0 digger');
+assert(typeDef(theme, theme.genera[0], 'action0').file === 'reader.png', 'normal action0 reader');
+assert(typeDef(theme, theme.genera[0], 'exit').file === 'bomber.png', 'normal exit bomber');
+assert(typeDef(theme, skater, 'faller').file === 'ballooner.png', 'skater faller ballooner');
+assert(typeDef(theme, skater, 'climber').file === 'climber_skateboarder.png', 'skater climber');
+/* action1 digger on normal is extra vs classic (classic only has digger on skater) */
+const n0 = theme.genera[0];
+if (n0.types.action1) {
+  assert(n0.types.action1.file === 'digger.png', 'normal action1 digger (web extra)');
+}
+
 if (failed) process.exit(1);
 console.log('All tests passed');
