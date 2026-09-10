@@ -37,6 +37,13 @@
 - [x] Fallers drift slightly horizontally while falling (classic ±1 px).
 - [x] Unit tests for cross-ledge landing and the spawn false-positive case.
 
+## Done (flake apps)
+
+- [x] `flake.nix` apps: `serve` (default), `demo`, `build`, `test`
+      - `nix run .#serve` / `nix run` — auto-build dist if missing, then static server
+      - `nix run .#demo` — force rebuild then serve
+      - `nix run .#build` / `nix run .#test`
+
 ## Next
 
 - [ ] Additional themes (Big Penguins, Turtles, …) as selectable packs

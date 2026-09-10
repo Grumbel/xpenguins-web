@@ -10,12 +10,67 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        node = pkgs.nodejs;
+
+        /*
+          Prefer the caller's working tree when it looks like this repo so
+          `nix run .#build` writes dist/ where you expect. Otherwise copy the
+          flake source to a tempdir (needed when the tree is a pure store path).
+        */
+        enterProject = ''
+          if [ -f ./scripts/build.mjs ] && [ -d ./themes/penguins ] && [ -f ./package.json ]; then
+            :
+          else
+            work="$(mktemp -d)"
+            cp -a ${self}/. "$work/"
+            chmod -R u+w "$work"
+            cd "$work"
+          fi
+        '';
+
+        mkScript = name: body:
+          pkgs.writeShellApplication {
+            inherit name;
+            runtimeInputs = [ node ];
+            text = ''
+              set -euo pipefail
+              ${enterProject}
+              ${body}
+            '';
+          };
+
+        toApp = drv: name: {
+          type = "app";
+          program = "${drv}/bin/${name}";
+        };
+
+        scriptServe = mkScript "xpenguins-web-serve" ''
+          if [ ! -f dist/xpenguins-web.js ]; then
+            echo "dist missing — building…"
+            node scripts/build.mjs
+          fi
+          exec node scripts/serve.mjs
+        '';
+
+        scriptDemo = mkScript "xpenguins-web-demo" ''
+          node scripts/build.mjs
+          exec node scripts/serve.mjs
+        '';
+
+        scriptBuild = mkScript "xpenguins-web-build" ''
+          node scripts/build.mjs
+        '';
+
+        scriptTest = mkScript "xpenguins-web-test" ''
+          node scripts/test-solids.mjs
+        '';
+
       in {
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "xpenguins-web";
           version = "0.1.0";
           src = pkgs.lib.cleanSource ./.;
-          nativeBuildInputs = [ pkgs.nodejs ];
+          nativeBuildInputs = [ node ];
           buildPhase = ''
             runHook preBuild
             node scripts/build.mjs
@@ -35,10 +90,23 @@
           };
         };
 
+        apps = {
+          default = toApp scriptServe "xpenguins-web-serve";
+          serve = toApp scriptServe "xpenguins-web-serve";
+          demo = toApp scriptDemo "xpenguins-web-demo";
+          build = toApp scriptBuild "xpenguins-web-build";
+          test = toApp scriptTest "xpenguins-web-test";
+        };
+
         devShells.default = pkgs.mkShell {
-          packages = [ pkgs.nodejs pkgs.imagemagick ];
+          packages = [ node pkgs.imagemagick ];
           shellHook = ''
-            echo "xpenguins-web: node scripts/build.mjs && node scripts/serve.mjs"
+            echo "xpenguins-web — nix apps:"
+            echo "  nix run .#serve   # static server on :8765 (builds dist if needed)"
+            echo "  nix run .#demo    # force rebuild then serve"
+            echo "  nix run .#build   # node scripts/build.mjs"
+            echo "  nix run .#test    # geometry / genus unit tests"
+            echo "  nix run           # same as #serve"
           '';
         };
       }
