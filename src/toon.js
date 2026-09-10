@@ -9,6 +9,7 @@
 
 import {
   findSupport, blockedSide, hitCeiling, landOnLedge, canStepUp, wallBeside, climbTopSolid,
+  pushOutHorizontal, blockedBothSides,
 } from './solids.js';
 
 export const Type = {
@@ -103,6 +104,7 @@ export function createToon(vw, theme, genus) {
     cycle: 0,
     climbSide: 0,
     held: false,
+    stuck: 0,
     terminating: false,
   };
 }
@@ -259,6 +261,8 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
       /* After height adjust in setType, re-snap feet to ledge. */
       const wd = typeDef(theme, t.genus, t.type);
       t.y = landed.y - wd.height;
+      pushOutHorizontal(solids, t, wd.width, wd.height);
+      t.stuck = 0;
       return;
     }
     if (t.y > vh + 40) Object.assign(t, createToon(vw, theme));
@@ -266,12 +270,19 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   }
 
   if (t.type === Type.WALKER) {
+    /* Escape if we embedded into a solid (tight corners / fast step-in). */
+    if (pushOutHorizontal(solids, t, w, h)) {
+      t.stuck = (t.stuck | 0) + 2;
+    }
+
     const support = findSupport(solids, t.x, t.y, w, h, 5);
     if (!support) {
+      t.stuck = 0;
       setType(t, Type.TUMBLER, theme, true);
       return;
     }
     t.y = support.y - h;
+
     /* Classic: ~1/100 frames → random action0..actionN (reader, digger, …). */
     {
       const acts = listActionKeys(t.genus);
@@ -280,9 +291,42 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         return;
       }
     }
+
     const side = dirSign(t.dir);
     const block = blockedSide(solids, t.x, t.y, w, h, side);
+    const both = blockedBothSides(solids, t.x, t.y, w, h);
+
+    if (both) {
+      /*
+       * Narrow shaft / two walls: climbing one face is better than spinning
+       * forever; if we cannot climb, tumble out.
+       */
+      t.stuck = (t.stuck | 0) + 3;
+      if (typeDef(theme, t.genus, Type.CLIMBER) && (t.stuck | 0) < 20) {
+        const face = blockedSide(solids, t.x, t.y, w, h, side) ||
+          blockedSide(solids, t.x, t.y, w, h, -side);
+        if (face) {
+          t.climbSide = side;
+          setType(t, Type.CLIMBER, theme, true);
+          t.x = side > 0 ? face.x - w : face.x + face.w;
+          t.vx = 0;
+          t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+          return;
+        }
+      }
+      if ((t.stuck | 0) >= 10) {
+        t.stuck = 0;
+        setType(t, Type.TUMBLER, theme, true);
+        t.vy = Math.max(2, def.speed || 2);
+        return;
+      }
+    }
+
     if (block) {
+      t.stuck = (t.stuck | 0) + 1;
+      /* Sit just outside the face so the next step is not still penetrating. */
+      t.x = side > 0 ? block.x - w - 1 : block.x + block.w + 1;
+
       /* Classic: try a small step-up onto a higher ledge before turning. */
       const rise = 8;
       if (canStepUp(solids, t.x, t.y, w, h, side, rise)) {
@@ -290,13 +334,30 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         if (upSupport && upSupport.y < support.y - 2) {
           t.y = upSupport.y - h;
           t.x += side * Math.min(4, Math.abs(t.vx) || 2);
+          t.stuck = 0;
           return;
         }
       }
+
       /*
-       * Tall wall (extends well above this ledge) → almost always climb.
-       * Short face → turn / float / occasional climb (classic mix).
+       * Stuck too long against a face → force a decisive escape instead of
+       * oscillating turn/climb in a corner.
        */
+      if ((t.stuck | 0) >= 18) {
+        t.stuck = 0;
+        if (typeDef(theme, t.genus, Type.CLIMBER) && rand(2) === 0) {
+          t.climbSide = side;
+          setType(t, Type.CLIMBER, theme, true);
+          t.x = side > 0 ? block.x - w : block.x + block.w;
+          t.vx = 0;
+          t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+        } else {
+          setType(t, Type.TUMBLER, theme, true);
+          t.vy = Math.max(2, def.speed || 2);
+        }
+        return;
+      }
+
       const tallWall = block.y < support.y - 12;
       const canClimb = !!typeDef(theme, t.genus, Type.CLIMBER);
       const r = rand(8);
@@ -307,16 +368,22 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         t.x = side > 0 ? block.x - w : block.x + block.w;
         t.vx = 0;
         t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+        t.stuck = 0;
       } else if (typeDef(theme, t.genus, Type.FLOATER) && r < 6) {
-        /* Floater = "superpenguin" for skateboarders in the classic theme. */
         t.dir = 1 - t.dir;
         setType(t, Type.FLOATER, theme, true);
+        t.stuck = 0;
       } else {
         t.dir = 1 - t.dir;
         t.vx = dirSign(t.dir) * def.speed;
+        /* Nudge away so we do not immediately re-collide the same face. */
+        t.x += dirSign(t.dir) * 2;
       }
       return;
     }
+
+    t.stuck = Math.max(0, (t.stuck | 0) - 1);
+
     const cx = t.x + w / 2;
     if (cx < support.x + 2 || cx > support.x + support.w - 2) {
       /* About to walk off: climb if a wall face is ahead, else tumble/turn */
@@ -327,8 +394,10 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         t.x = side > 0 ? edgeBlock.x - w : edgeBlock.x + edgeBlock.w;
         t.vx = 0;
         t.vy = -typeDef(theme, t.genus, Type.CLIMBER).speed;
+        t.stuck = 0;
       } else if (rand(2) === 0) {
         setType(t, Type.TUMBLER, theme, true);
+        t.stuck = 0;
       } else {
         t.dir = 1 - t.dir;
         t.vx = dirSign(t.dir) * def.speed;
@@ -357,6 +426,9 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
         t.dir = 0;
       }
       setType(t, Type.WALKER, theme, true);
+      const wd = typeDef(theme, t.genus, t.type);
+      pushOutHorizontal(solids, t, wd.width, wd.height);
+      t.stuck = 0;
       return;
     }
 

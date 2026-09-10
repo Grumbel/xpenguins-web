@@ -293,3 +293,41 @@ export function climbTopSolid(solids, x, y, w, h, side) {
   }
   return best;
 }
+
+/**
+ * True if the toon's center is inside a non-floor solid (penetration).
+ */
+export function bodyInside(solids, x, y, w, h) {
+  const cx = x + w * 0.5;
+  const cy = y + h * 0.5;
+  for (const s of solids) {
+    if (s.floor) continue;
+    if (cx > s.x + 1 && cx < s.x + s.w - 1 &&
+        cy > s.y + 1 && cy < s.y + s.h - 1) {
+      return s;
+    }
+  }
+  return null;
+}
+
+/**
+ * Push the toon out of a solid horizontally to the nearer face.
+ * Returns true if a correction was applied.
+ */
+export function pushOutHorizontal(solids, t, w, h) {
+  const s = bodyInside(solids, t.x, t.y, w, h);
+  if (!s) return false;
+  const cx = t.x + w * 0.5;
+  const dl = cx - s.x;
+  const dr = s.x + s.w - cx;
+  if (dl <= dr) t.x = s.x - w - 1;
+  else t.x = s.x + s.w + 1;
+  return true;
+}
+
+/**
+ * Both left and right faces blocked (narrow shaft / tight corner).
+ */
+export function blockedBothSides(solids, x, y, w, h) {
+  return !!(blockedSide(solids, x, y, w, h, 1) && blockedSide(solids, x, y, w, h, -1));
+}
