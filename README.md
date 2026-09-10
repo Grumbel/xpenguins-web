@@ -78,15 +78,28 @@ Mark elements that should **not** be ledges:
 
 ## Bookmarklet
 
-Bookmarklets cannot reasonably inline a full sprite sheet (tens of KiB).
-Use a **loader** bookmarklet pointing at your hosted bundle:
+The full bundle (~80 KiB with sprites) does **not** fit in a bookmark.
+Use a tiny **loader** that injects your hosted `xpenguins-web.js`:
+
+1. Host `xpenguins-web.js` (from `dist/` or `examples/`) on any HTTPS origin.
+2. Open the demo on that same origin (so the drag-link picks up the right URL),
+   **or** edit the URL in the snippet below.
+3. Drag **🐧 XPenguins** from the demo page into the bookmarks bar
+   (or create a bookmark whose URL is the `javascript:`… string).
+
+Loader template (replace the script URL):
 
 ```javascript
-javascript:(function(){if(window.XPenguins){XPenguins.start();return;}var s=document.createElement('script');s.src='https://YOUR.CDN/xpenguins-web.js';s.onload=function(){XPenguins.start({count:10});};document.documentElement.appendChild(s);})();
+javascript:(function(){if(window.XPenguins){XPenguins.start({count:12,grab:true});return;}var s=document.createElement('script');s.src='https://YOUR.CDN/xpenguins-web.js';s.onload=function(){XPenguins.start({count:12,grab:true});};s.onerror=function(){alert('XPenguins: failed to load script');};document.documentElement.appendChild(s);})();
 ```
 
-Self-contained data-URI bookmarklets are only viable for a tiny subset of
-frames; not recommended for the full theme.
+Click the bookmark on any page: it loads the script once, then
+`XPenguins.start(...)`. Click again to call `start` if already loaded
+(restart). Use the page’s own Stop control only on the demo; on foreign
+sites call `XPenguins.stop()` from the console if needed.
+
+**Note:** The remote page must allow the script (no strict CSP blocking your
+host). `file://` pages often block external scripts.
 
 ## Layout
 

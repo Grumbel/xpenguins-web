@@ -68,6 +68,33 @@
       padding: 0 0.4rem;
       min-width: 6rem;
     }
+    .bookmarklet-row {
+      margin: 0 auto 0.75rem;
+      width: min(40rem, 92vw);
+      padding: 0.65rem 0.9rem;
+      background: #fff8e7;
+      border: 2px dashed #e0c060;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      line-height: 1.4;
+      color: #333;
+    }
+    .bookmarklet-row a.bookmarklet {
+      display: inline-block;
+      margin: 0.35rem 0.35rem 0 0;
+      padding: 0.4rem 0.85rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: grab;
+    }
+    .bookmarklet-row a.bookmarklet:active { cursor: grabbing; }
+    .bookmarklet-row code {
+      font-size: 0.78rem;
+      word-break: break-all;
+    }
 
     .hint {
       margin: 0 auto 0.75rem;
@@ -245,6 +272,19 @@
     Pyramid of shelves (narrow top, wide base). Towers to <strong>climb</strong>, gaps to <strong>tumble</strong>. Walkers sometimes stop to <strong>read</strong> (or dig). Drag with the mouse; Squish = click without dragging.
   </p>
 
+  <div class="bookmarklet-row" data-xpenguins-ignore>
+    <strong>Bookmarklet</strong> — drag this to your bookmarks bar, then click it on any page:
+    <div>
+      <a class="bookmarklet" id="bookmarklet-link" href="#">🐧 XPenguins</a>
+    </div>
+    <p style="margin:0.4rem 0 0">
+      Loads the script from <code id="bookmarklet-src"></code>
+      (this page’s origin). Host <code>xpenguins-web.js</code> somewhere public
+      and open this demo from that host so the bookmark keeps working elsewhere.
+      The full bundle is too large to paste into a bookmark as source.
+    </p>
+  </div>
+
   <div class="world" aria-label="Penguin playground">
     <!-- Level 1 -->
     <!-- Apex -->
@@ -318,6 +358,24 @@
   <script>
     (function () {
       function boot() {
+        /* Loader bookmarklet: injects this origin’s xpenguins-web.js, then start(). */
+        (function wireBookmarklet() {
+          var scriptUrl = new URL('xpenguins-web.js', window.location.href).href;
+          var srcEl = document.getElementById('bookmarklet-src');
+          if (srcEl) srcEl.textContent = scriptUrl;
+          var code =
+            "javascript:(function(){" +
+            "if(window.XPenguins){XPenguins.start({count:12,grab:true});return;}" +
+            "var u='" + scriptUrl.replace(/'/g, "\\'") + "';" +
+            "var s=document.createElement('script');" +
+            "s.src=u;s.onload=function(){XPenguins.start({count:12,grab:true});};" +
+            "s.onerror=function(){alert('XPenguins: failed to load '+u);};" +
+            "document.documentElement.appendChild(s);" +
+            "})();";
+          var a = document.getElementById('bookmarklet-link');
+          if (a) a.setAttribute('href', code);
+        })();
+
         if (typeof XPenguins === 'undefined') {
           console.error('[xpenguins-web] XPenguins is not defined (bundle missing or blocked).');
           document.body.insertAdjacentHTML('afterbegin',
