@@ -22,10 +22,10 @@ Or with Nix:
 ```bash
 nix develop          # node + imagemagick
 nix run .#build      # → dist/xpenguins-web.js
-nix run .#test       # unit tests
 nix run .#serve      # http://127.0.0.1:8765/examples/index.html
-nix run .#demo       # force rebuild, then serve
-# `nix run` is the same as `#serve`
+nix run              # same as #serve
+nix flake check      # package derivation + unit tests
+nix build            # result/share/xpenguins-web/
 ```
 
 Drop onto any page:

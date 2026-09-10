@@ -11,6 +11,7 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         node = pkgs.nodejs;
+        src = pkgs.lib.cleanSource ./.;
 
         /*
           Prefer the caller's working tree when it looks like this repo so
@@ -39,26 +40,23 @@
             '';
           };
 
-        /*
-          Flake apps: `nix flake show` reads meta.description when present
-          (Nix ≥ 2.19 / recent nixpkgs). Keep type+program for older clients.
-        */
         toApp = drv: name: description: {
           type = "app";
           program = "${drv}/bin/${name}";
           meta = { inherit description; };
         };
 
+        /*
+          Serve only starts the static server. Build separately with
+          `nix run .#build` (or rely on packages.default / a prior build).
+          Auto-building on every serve made #demo vs #serve meaningless.
+        */
         scriptServe = mkScript "xpenguins-web-serve" ''
           if [ ! -f dist/xpenguins-web.js ]; then
-            echo "dist missing — building…"
+            echo "dist/xpenguins-web.js missing — run: nix run .#build" >&2
+            echo "Building once so the server can start…" >&2
             node scripts/build.mjs
           fi
-          exec node scripts/serve.mjs
-        '';
-
-        scriptDemo = mkScript "xpenguins-web-demo" ''
-          node scripts/build.mjs
           exec node scripts/serve.mjs
         '';
 
@@ -66,15 +64,10 @@
           node scripts/build.mjs
         '';
 
-        scriptTest = mkScript "xpenguins-web-test" ''
-          node scripts/test-solids.mjs
-        '';
-
-      in {
-        packages.default = pkgs.stdenv.mkDerivation {
+        pkg = pkgs.stdenv.mkDerivation {
           pname = "xpenguins-web";
           version = "0.1.0";
-          src = pkgs.lib.cleanSource ./.;
+          inherit src;
           nativeBuildInputs = [ node ];
           buildPhase = ''
             runHook preBuild
@@ -95,28 +88,44 @@
           };
         };
 
+        /*
+          `nix flake check` runs these. Unit tests do not need a browser.
+        */
+        unitTests = pkgs.runCommand "xpenguins-web-unit-tests" {
+          nativeBuildInputs = [ node ];
+        } ''
+          cp -a ${src}/. .
+          node scripts/test-solids.mjs
+          mkdir -p $out
+          echo ok > $out/result
+        '';
+
+      in {
+        packages.default = pkg;
+
+        checks = {
+          package = pkg;
+          unit-tests = unitTests;
+        };
+
         apps = {
           default = toApp scriptServe "xpenguins-web-serve"
-            "Serve the demo (build dist if missing) on http://127.0.0.1:8765";
+            "Static server for examples/ on http://127.0.0.1:8765 (builds dist only if missing)";
           serve = toApp scriptServe "xpenguins-web-serve"
-            "Serve the demo (build dist if missing) on http://127.0.0.1:8765";
-          demo = toApp scriptDemo "xpenguins-web-demo"
-            "Force-rebuild the bundle, then serve the playground demo";
+            "Static server for examples/ on http://127.0.0.1:8765 (builds dist only if missing)";
           build = toApp scriptBuild "xpenguins-web-build"
-            "Build dist/xpenguins-web.js with embedded theme sprites";
-          test = toApp scriptTest "xpenguins-web-test"
-            "Run geometry, ledge-scoring, and genus unit tests";
+            "Write dist/xpenguins-web.js with embedded theme sprites";
         };
 
         devShells.default = pkgs.mkShell {
           packages = [ node pkgs.imagemagick ];
           shellHook = ''
-            echo "xpenguins-web — nix apps:"
-            echo "  nix run .#serve   # static server on :8765 (builds dist if needed)"
-            echo "  nix run .#demo    # force rebuild then serve"
-            echo "  nix run .#build   # node scripts/build.mjs"
-            echo "  nix run .#test    # geometry / genus unit tests"
-            echo "  nix run           # same as #serve"
+            echo "xpenguins-web:"
+            echo "  nix run .#build    # write dist/xpenguins-web.js"
+            echo "  nix run .#serve    # http://127.0.0.1:8765 (build first if needed)"
+            echo "  nix run            # same as #serve"
+            echo "  nix flake check    # package build + unit tests"
+            echo "  nix build          # installable package under result/"
           '';
         };
       }

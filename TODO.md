@@ -39,10 +39,9 @@
 
 ## Done (flake apps)
 
-- [x] `flake.nix` apps: `serve` (default), `demo`, `build`, `test`
-      - `nix run .#serve` / `nix run` — auto-build dist if missing, then static server
-      - `nix run .#demo` — force rebuild then serve
-      - `nix run .#build` / `nix run .#test`
+- [x] `flake.nix` apps: `serve` (default), `build`
+- [x] `checks`: package build + unit tests via `nix flake check`
+      (no separate `#demo` / `#test` apps — they duplicated serve/check)
 
 ## Done (ledges + squish)
 
