@@ -86,10 +86,17 @@ export function isActionType(type) {
 }
 
 
+/** Random horizontal drift for fallers (balloons especially looked parallel). */
+function fallerDrift(dir, speed) {
+  const mag = 0.4 + Math.random() * 2.4; /* 0.4 … 2.8 px/tick */
+  return dirSign(dir) * mag;
+}
+
 export function createToon(vw, theme, genus) {
   const g = genus || pickGenus(theme);
   const fall = typeDef(theme, g, Type.FALLER);
   const dir = rand(2);
+  const nframes = Math.max(1, (fall && fall.frames) || 8);
   return {
     active: true,
     genus: g,
@@ -97,10 +104,11 @@ export function createToon(vw, theme, genus) {
     x: rand(Math.max(1, vw - fall.width)),
     /* Fully above the screen (y + height === 0), same as xpenguins-ng. */
     y: -fall.height,
-    vx: dirSign(dir),
-    vy: fall.speed,
+    /* Varied drift so ballooners do not share one diagonal. */
+    vx: fallerDrift(dir, fall.speed),
+    vy: (fall.speed || 3) * (0.75 + Math.random() * 0.5),
     dir,
-    frame: 0,
+    frame: rand(nframes),
     cycle: 0,
     climbSide: 0,
     held: false,
@@ -128,8 +136,8 @@ function setType(t, type, theme, keepDir) {
   }
 
   if (type === Type.FALLER) {
-    t.vx = dirSign(t.dir);
-    t.vy = def.speed;
+    t.vx = fallerDrift(t.dir, def.speed);
+    t.vy = (def.speed || 3) * (0.75 + Math.random() * 0.5);
   } else if (type === Type.WALKER) {
     t.vy = 0;
     t.vx = dirSign(t.dir) * def.speed;
@@ -244,6 +252,21 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
   if (t.x > vw) t.x = -w;
 
   if (t.type === Type.FALLER || t.type === Type.TUMBLER) {
+    /*
+     * Gentle wind so fallers (esp. ballooners) fan out instead of sharing
+     * one slope. Bounce off vertical faces like classic side-block reverse.
+     */
+    if (t.type === Type.FALLER) {
+      t.vx += (Math.random() - 0.5) * 0.2;
+      if (t.vx > 3.2) t.vx = 3.2;
+      if (t.vx < -3.2) t.vx = -3.2;
+      const hitR = blockedSide(solids, t.x, t.y, w, h, 1);
+      const hitL = blockedSide(solids, t.x, t.y, w, h, -1);
+      if (hitR && t.vx > 0) t.vx = -Math.abs(t.vx);
+      if (hitL && t.vx < 0) t.vx = Math.abs(t.vx);
+      t.dir = t.vx >= 0 ? 1 : 0;
+    }
+
     const ceil = hitCeiling(solids, t.x, t.y, w, h);
     if (ceil && t.vy < 0) {
       setType(t, Type.FALLER, theme, true);
