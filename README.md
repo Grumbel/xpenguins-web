@@ -90,7 +90,7 @@ Use a tiny **loader** that injects your hosted `xpenguins-web.js`:
 Loader template (replace the script URL):
 
 ```javascript
-javascript:(function(){if(window.XPenguins){XPenguins.start({count:12,grab:true});return;}var s=document.createElement('script');s.src='https://YOUR.CDN/xpenguins-web.js';s.onload=function(){XPenguins.start({count:12,grab:true});};s.onerror=function(){alert('XPenguins: failed to load script');};document.documentElement.appendChild(s);})();
+javascript:(function(){if(window.XPenguins){XPenguins.start({count:12,grab:true});return;}var s=document.createElement('script');s.src='https://xpenguins-web.github.io/xpenguins-web.js';s.onload=function(){XPenguins.start({count:12,grab:true});};s.onerror=function(){alert('XPenguins: failed to load script');};document.documentElement.appendChild(s);})();
 ```
 
 Click the bookmark on any page: it loads the script once, then

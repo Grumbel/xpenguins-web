@@ -282,9 +282,8 @@
       <a class="bookmarklet" id="bookmarklet-link" href="#">🐧 XPenguins</a>
     </div>
     <p style="margin:0.4rem 0 0">
-      Loads the script from <code id="bookmarklet-src"></code>
-      (this page’s origin). Host <code>xpenguins-web.js</code> somewhere public
-      and open this demo from that host so the bookmark keeps working elsewhere.
+      Loads <code id="bookmarklet-src">https://xpenguins-web.github.io/xpenguins-web.js</code>
+      on any page. Drag the button to the bookmarks bar, then click it elsewhere.
       The full bundle is too large to paste into a bookmark as source.
     </p>
   </div>
@@ -362,15 +361,21 @@
   <script>
     (function () {
       function boot() {
-        /* Loader bookmarklet: injects this origin’s xpenguins-web.js, then start(). */
+        /* Loader bookmarklet → https://xpenguins-web.github.io/xpenguins-web.js */
         (function wireBookmarklet() {
-          var scriptUrl = new URL('xpenguins-web.js', window.location.href).href;
+          var PRODUCTION = 'https://xpenguins-web.github.io/xpenguins-web.js';
+          var scriptEl = document.querySelector('script[src*="xpenguins-web.js"]');
+          /* Prefer the live Pages URL so a dragged bookmark works on other sites. */
+          var scriptUrl = PRODUCTION;
+          if (/xpenguins-web\.github\.io$/i.test(location.hostname) && scriptEl && scriptEl.src) {
+            scriptUrl = scriptEl.src;
+          }
           var srcEl = document.getElementById('bookmarklet-src');
           if (srcEl) srcEl.textContent = scriptUrl;
           var code =
             "javascript:(function(){" +
             "if(window.XPenguins){XPenguins.start({count:12,grab:true});return;}" +
-            "var u='" + scriptUrl.replace(/'/g, "\\'") + "';" +
+            "var u='" + scriptUrl.replace(/'/g, "\'") + "';" +
             "var s=document.createElement('script');" +
             "s.src=u;s.onload=function(){XPenguins.start({count:12,grab:true});};" +
             "s.onerror=function(){alert('XPenguins: failed to load '+u);};" +
