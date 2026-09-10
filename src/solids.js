@@ -254,7 +254,6 @@ export function wallBeside(solids, x, y, w, h, side, grip = 4) {
   let best = null;
   for (const s of solids) {
     if (s.floor) continue;
-    /* Horizontal contact with the near face */
     let faceHit = false;
     if (side > 0) {
       faceHit = probeX >= s.x - 1 && probeX <= s.x + grip;
@@ -262,10 +261,35 @@ export function wallBeside(solids, x, y, w, h, side, grip = 4) {
       faceHit = probeX <= s.x + s.w + 1 && probeX >= s.x + s.w - grip;
     }
     if (!faceHit) continue;
-    /* Vertical overlap: feet still at or below top, head not fully below bottom */
-    if (bodyBot < s.y - 2) continue; /* already above the wall */
-    if (bodyTop > s.y + s.h) continue; /* fully below the wall */
-    if (!best || s.y < best.y) best = s; /* prefer higher top when overlapping */
+    /*
+     * Keep grip while body overlaps the solid, or feet have only just
+     * cleared the top (within ~speed margin) so the climber can mount.
+     */
+    if (bodyBot < s.y - 10) continue;
+    if (bodyTop > s.y + s.h) continue;
+    if (!best || s.y < best.y) best = s;
+  }
+  return best;
+}
+
+/**
+ * Solid whose top the climber should step onto (feet near top, beside face).
+ */
+export function climbTopSolid(solids, x, y, w, h, side) {
+  const foot = y + h;
+  const face = side > 0 ? x + w : x;
+  let best = null;
+  for (const s of solids) {
+    if (s.floor) continue;
+    /* Feet near this solid's top only (not some other ledge at the same height). */
+    if (Math.abs(foot - s.y) > 12) continue;
+    /* Must still be at the face we were climbing. */
+    if (side > 0) {
+      if (Math.abs(face - s.x) > 10) continue;
+    } else {
+      if (Math.abs(face - (s.x + s.w)) > 10) continue;
+    }
+    if (!best || s.y < best.y) best = s;
   }
   return best;
 }

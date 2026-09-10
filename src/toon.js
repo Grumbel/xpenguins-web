@@ -8,7 +8,7 @@
  */
 
 import {
-  findSupport, blockedSide, hitCeiling, landOnLedge, canStepUp, wallBeside,
+  findSupport, blockedSide, hitCeiling, landOnLedge, canStepUp, wallBeside, climbTopSolid,
 } from './solids.js';
 
 export const Type = {
@@ -309,25 +309,32 @@ export function stepToon(t, solids, theme, vw, vh, opts) {
 
   if (t.type === Type.CLIMBER) {
     const side = t.climbSide || dirSign(t.dir);
-    /*
-     * Stick to the wall face while climbing. wallBeside keeps contact until
-     * the feet clear the top — blockedSide(midY) used to fail early and
-     * turn the climb into an instant fall.
-     */
     const wall = wallBeside(solids, t.x, t.y, w, h, side);
+    const top = climbTopSolid(solids, t.x, t.y, w, h, side) || wall;
+
+    /*
+     * Mount the top as a walker when feet reach/pass the solid top.
+     * Must run even if wallBeside already lost grip (overshoot from vy).
+     */
+    if (top && (t.y + h) <= top.y + 8) {
+      t.y = top.y - h;
+      /* Stand on the near edge of the solid, facing away from the face we climbed */
+      if (side > 0) {
+        t.x = top.x + 2;
+        t.dir = 1;
+      } else {
+        t.x = top.x + top.w - w - 2;
+        t.dir = 0;
+      }
+      setType(t, Type.WALKER, theme, true);
+      return;
+    }
+
     if (!wall) {
       setType(t, Type.FALLER, theme, true);
       return;
     }
     t.x = side > 0 ? wall.x - w : wall.x + wall.w;
-    /* Feet reached the top ledge → walk away from the face. */
-    if (t.y + h <= wall.y + 3) {
-      t.y = wall.y - h;
-      t.dir = side > 0 ? 1 : 0;
-      setType(t, Type.WALKER, theme, true);
-      t.x += side > 0 ? 2 : -2;
-      return;
-    }
     if (t.y < -h) Object.assign(t, createToon(vw, theme));
     return;
   }
