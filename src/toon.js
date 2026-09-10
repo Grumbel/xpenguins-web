@@ -76,6 +76,7 @@ export function createToon(vw, theme, genus) {
     frame: 0,
     cycle: 0,
     climbSide: 0,
+    held: false,
     terminating: false,
   };
 }

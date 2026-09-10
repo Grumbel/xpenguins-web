@@ -1,5 +1,9 @@
 /**
  * Full-viewport canvas overlay.
+ *
+ * z-index is high but below typical “page chrome” that sets
+ * z-index: 2147483647 so toolbars can still receive clicks while the
+ * overlay is interactive (squish / grab).
  */
 
 export function createOverlay(opts = {}) {
@@ -13,10 +17,10 @@ export function createOverlay(opts = {}) {
     'top:0',
     'width:100vw',
     'height:100vh',
-    'z-index:2147483646',
+    'z-index:2147483645',
     interactive ? 'pointer-events:auto' : 'pointer-events:none',
     'image-rendering:pixelated',
-    'cursor:' + (interactive ? 'crosshair' : 'default'),
+    'cursor:' + (interactive ? 'grab' : 'default'),
   ].join(';');
   document.documentElement.appendChild(canvas);
   const ctx = canvas.getContext('2d');
@@ -32,9 +36,9 @@ export function createOverlay(opts = {}) {
     canvas,
     ctx,
     resize,
-    setInteractive(on) {
+    setInteractive(on, style = {}) {
       canvas.style.pointerEvents = on ? 'auto' : 'none';
-      canvas.style.cursor = on ? 'crosshair' : 'default';
+      canvas.style.cursor = style.cursor || (on ? 'grab' : 'default');
     },
     destroy() {
       window.removeEventListener('resize', resize);

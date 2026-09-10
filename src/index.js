@@ -6,8 +6,10 @@
  *   stop()
  *   setNumber(n)
  *   setSquish(on)
+ *   setGrab(on)
  *   isRunning()
  *   isSquish()
+ *   isGrab()
  */
 
 import { collectSolids } from './solids.js';
@@ -33,11 +35,19 @@ let lastFrame = 0;
 let observers = [];
 /** Bumps on every stop/start so async exit animations cannot clobber a new run. */
 let session = 0;
+
+/** Active pointer drag (one toon at a time). */
+let drag = null;
+
 let opts = {
   count: 8,
   blood: true,
   angels: true,
   squish: false,
+  /** Pick up toons with press, drag, release (default on). */
+  grab: true,
+  /** Pixels of movement before a press counts as a drag, not a click-squish. */
+  dragThreshold: 6,
   solidRefreshMs: 400,
   respectReducedMotion: true,
   minTop: 12,
@@ -71,24 +81,128 @@ function refreshSolids() {
   lastSolids = performance.now();
 }
 
-function onPointerDown(ev) {
-  if (!opts.squish || !theme || !running) return;
-  const px = ev.clientX;
-  const py = ev.clientY;
+function wantsPointer() {
+  return !!(opts.grab || opts.squish);
+}
+
+function syncPointerMode() {
+  if (!overlay) return;
+  const on = running && wantsPointer();
+  overlay.setInteractive(on, {
+    cursor: opts.grab ? 'grab' : (opts.squish ? 'crosshair' : 'default'),
+  });
+}
+
+function toonUnder(px, py) {
+  if (!theme) return null;
   for (let i = toons.length - 1; i >= 0; i--) {
     const t = toons[i];
-    if (hitToon(t, theme, px, py)) {
-      squishToon(t, theme, opts);
-      break;
+    if (!t.active || t.terminating) continue;
+    if (t.type === Type.EXIT || t.type === Type.ANGEL ||
+        t.type === Type.SPLAT || t.type === Type.EXPLOSION ||
+        t.type === Type.ZAPPED) continue;
+    if (hitToon(t, theme, px, py)) return t;
+  }
+  return null;
+}
+
+function releaseDrag(asSquish) {
+  if (!drag) return;
+  const { toon, pointerId } = drag;
+  try {
+    if (overlay && overlay.canvas.hasPointerCapture?.(pointerId)) {
+      overlay.canvas.releasePointerCapture(pointerId);
     }
+  } catch (_) { /* already released */ }
+
+  toon.held = false;
+  if (asSquish && opts.squish) {
+    squishToon(toon, theme, opts);
+  } else {
+    /* Drop: become a faller / tumbler at the release point. */
+    toon.type = Type.FALLER;
+    const def = typeDef(theme, toon.genus, Type.FALLER);
+    toon.frame = 0;
+    toon.cycle = 0;
+    toon.vx = 0;
+    toon.vy = def.speed || 3;
+  }
+  drag = null;
+  if (overlay) {
+    overlay.setInteractive(running && wantsPointer(), {
+      cursor: opts.grab ? 'grab' : (opts.squish ? 'crosshair' : 'default'),
+    });
   }
 }
 
-function bindSquishListener(on) {
+function onPointerDown(ev) {
+  if (!running || !theme || !wantsPointer()) return;
+  if (ev.button != null && ev.button !== 0) return;
+
+  const t = toonUnder(ev.clientX, ev.clientY);
+  if (!t) return;
+
+  ev.preventDefault();
+  const def = typeDef(theme, t.genus, t.type);
+  drag = {
+    toon: t,
+    pointerId: ev.pointerId,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    offsetX: ev.clientX - t.x,
+    offsetY: ev.clientY - t.y,
+    moved: false,
+  };
+  t.held = true;
+  t.vx = 0;
+  t.vy = 0;
+  try {
+    overlay.canvas.setPointerCapture(ev.pointerId);
+  } catch (_) { /* ignore */ }
+  if (overlay) overlay.setInteractive(true, { cursor: 'grabbing' });
+}
+
+function onPointerMove(ev) {
+  if (!drag || drag.pointerId !== ev.pointerId) return;
+  const { toon } = drag;
+  const dx = ev.clientX - drag.startX;
+  const dy = ev.clientY - drag.startY;
+  if (!drag.moved && (dx * dx + dy * dy) >= opts.dragThreshold * opts.dragThreshold) {
+    drag.moved = true;
+  }
+  toon.x = ev.clientX - drag.offsetX;
+  toon.y = ev.clientY - drag.offsetY;
+  toon.held = true;
+  toon.vx = 0;
+  toon.vy = 0;
+}
+
+function onPointerUp(ev) {
+  if (!drag || drag.pointerId !== ev.pointerId) return;
+  const wasClick = !drag.moved;
+  const shouldSquish = wasClick && opts.squish;
+  releaseDrag(shouldSquish);
+}
+
+function onPointerCancel(ev) {
+  if (!drag || (ev && drag.pointerId !== ev.pointerId)) return;
+  releaseDrag(false);
+}
+
+function bindPointerListeners(on) {
   if (!overlay) return;
-  overlay.canvas.removeEventListener('pointerdown', onPointerDown);
-  if (on) overlay.canvas.addEventListener('pointerdown', onPointerDown);
-  overlay.setInteractive(!!on);
+  const c = overlay.canvas;
+  c.removeEventListener('pointerdown', onPointerDown);
+  c.removeEventListener('pointermove', onPointerMove);
+  c.removeEventListener('pointerup', onPointerUp);
+  c.removeEventListener('pointercancel', onPointerCancel);
+  if (on) {
+    c.addEventListener('pointerdown', onPointerDown);
+    c.addEventListener('pointermove', onPointerMove);
+    c.addEventListener('pointerup', onPointerUp);
+    c.addEventListener('pointercancel', onPointerCancel);
+  }
+  syncPointerMode();
 }
 
 function drawAll() {
@@ -120,6 +234,7 @@ function tick(now) {
   if (now - lastSolids > opts.solidRefreshMs) refreshSolids();
 
   for (const t of toons) {
+    if (t.held) continue;
     stepToon(t, solids, theme, vw, vh, opts);
   }
   drawAll();
@@ -153,18 +268,18 @@ function detachObservers() {
   while (observers.length) observers.pop()();
 }
 
-/**
- * Tear down overlay immediately (cancel any in-flight exit animation).
- */
 function destroyOverlayNow() {
   if (!overlay) return;
-  overlay.canvas.removeEventListener('pointerdown', onPointerDown);
+  bindPointerListeners(false);
+  if (drag) {
+    drag.toon.held = false;
+    drag = null;
+  }
   overlay.destroy();
   overlay = null;
 }
 
 async function start(userOpts = {}) {
-  /* Cancel previous session completely before starting a new one. */
   if (running || overlay) {
     session += 1;
     running = false;
@@ -192,8 +307,8 @@ async function start(userOpts = {}) {
   images = await loadImages(pack.images);
 
   const mySession = session;
-  overlay = createOverlay({ interactive: !!opts.squish });
-  bindSquishListener(!!opts.squish);
+  overlay = createOverlay({ interactive: wantsPointer() });
+  bindPointerListeners(true);
 
   const n = opts.count ?? theme.defaultCount ?? 8;
   opts.count = n;
@@ -201,7 +316,6 @@ async function start(userOpts = {}) {
   for (let i = 0; i < n; i++) toons.push(createToon(window.innerWidth, theme));
 
   if (mySession !== session) {
-    /* Superseded by another start/stop while images loaded. */
     destroyOverlayNow();
     toons = [];
     return api;
@@ -211,6 +325,7 @@ async function start(userOpts = {}) {
   refreshSolids();
   lastFrame = 0;
   attachObservers();
+  syncPointerMode();
   raf = requestAnimationFrame(tick);
   return api;
 }
@@ -222,13 +337,17 @@ function stop() {
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
   detachObservers();
+  if (drag) releaseDrag(false);
 
   if (overlay && theme) {
-    bindSquishListener(false);
-    for (const t of toons) terminateToon(t, theme);
+    bindPointerListeners(false);
+    for (const t of toons) {
+      t.held = false;
+      terminateToon(t, theme);
+    }
     let frames = 0;
     const finish = () => {
-      if (mySession !== session) return; /* superseded */
+      if (mySession !== session) return;
       frames++;
       refreshSolids();
       for (const t of toons) {
@@ -263,14 +382,25 @@ function setNumber(n) {
 }
 
 /**
- * Enable or disable click-to-squish without restarting the animation.
- * Fixes the example “Toggle squish” control that previously stop/start raced.
+ * Enable or disable click-to-squish (click without dragging).
+ * Does not require a restart; UI chrome should sit above the overlay z-index.
  */
 function setSquish(on) {
   opts.squish = !!on;
-  if (!overlay) return opts.squish;
-  bindSquishListener(opts.squish);
+  if (drag && !opts.squish) {
+    /* keep current drag; only affects click-release behaviour */
+  }
+  syncPointerMode();
+  bindPointerListeners(running && wantsPointer());
   return opts.squish;
+}
+
+function setGrab(on) {
+  opts.grab = !!on;
+  if (!opts.grab && drag) releaseDrag(false);
+  syncPointerMode();
+  bindPointerListeners(running && wantsPointer());
+  return opts.grab;
 }
 
 function isRunning() {
@@ -281,17 +411,23 @@ function isSquish() {
   return !!opts.squish;
 }
 
+function isGrab() {
+  return !!opts.grab;
+}
+
 const api = {
   start,
   stop,
   setNumber,
   setSquish,
+  setGrab,
   isRunning,
   isSquish,
+  isGrab,
   collectSolids,
 };
 
 export {
-  start, stop, setNumber, setSquish, isRunning, isSquish, collectSolids,
+  start, stop, setNumber, setSquish, setGrab, isRunning, isSquish, isGrab, collectSolids,
 };
 export default api;

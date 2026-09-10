@@ -43,10 +43,12 @@ Drop onto any page:
 | `XPenguins.stop()` | Exit animation then remove overlay |
 | `XPenguins.setNumber(n)` | Grow/shrink population |
 | `XPenguins.setSquish(on)` | Toggle click-to-squish live (no restart) |
+| `XPenguins.setGrab(on)` | Toggle press-drag-release grabbing (default on) |
 | `XPenguins.isRunning()` | Boolean |
 | `XPenguins.isSquish()` | Whether squish mode is on |
+| `XPenguins.isGrab()` | Whether grab mode is on |
 
-Options: `squish: true` enables click-to-squash (canvas captures pointers).
+Options: `squish: true` enables click-to-squash (click without dragging). `grab: true` (default) lets you pick up toons with press–drag–release; they fall when dropped. Keep page controls at a higher z-index than the overlay so they stay clickable.
 `respectReducedMotion: true` (default) skips start when the user prefers reduced motion.
 Solids refresh on scroll/resize and via `ResizeObserver` / `MutationObserver`.
 
