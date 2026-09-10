@@ -74,6 +74,28 @@ function findSupport(solids, x, y, w, h, slop = 3) {
   return best;
 }
 
+/**
+ * True landing: feet crossed a solid top this frame (prevFoot above, newFoot
+ * at/below). Prevents fallers spawned at y=-height from instantly "landing"
+ * on solids whose top is ≈0 (page headers flush with the viewport).
+ *
+ * @returns {object|null} the solid landed on (highest top that was crossed)
+ */
+function landOnLedge(solids, x, prevFoot, newFoot, w, slop = 4) {
+  if (newFoot <= prevFoot) return null; /* not falling */
+  const cx = x + w / 2;
+  let best = null;
+  for (const s of solids) {
+    if (cx < s.x || cx > s.x + s.w) continue;
+    const top = s.y;
+    /* Feet were strictly above the ledge, then reach or pass it. */
+    if (prevFoot < top - 0.5 && newFoot >= top - slop) {
+      if (!best || top < best.y) best = s;
+    }
+  }
+  return best;
+}
+
 /** Hit a solid while falling (head or body). */
 function hitCeiling(solids, x, y, w, h) {
   const head = y;
@@ -102,6 +124,11 @@ function blockedSide(solids, x, y, w, h, dir) {
 
 /**
  * Single toon state machine (classic-inspired), with multi-genus themes.
+ *
+ * Direction convention matches xpenguins-ng / classic XPenguins:
+ *   dir 0 = LEFT  (vx negative, sprite strip row 0)
+ *   dir 1 = RIGHT (vx positive, sprite strip row 1)
+ * Velocity for walkers: speed * (2*dir - 1)
  */
 
 
@@ -120,6 +147,11 @@ const Type = {
 
 function rand(n) {
   return Math.floor(Math.random() * n);
+}
+
+/** Horizontal sign from classic direction: 0→-1 (left), 1→+1 (right). */
+function dirSign(dir) {
+  return (dir | 0) * 2 - 1;
 }
 
 /** Resolve genera list (back-compat with flat theme.types). */
@@ -150,15 +182,18 @@ function typeDef(theme, genus, type) {
 function createToon(vw, theme, genus) {
   const g = genus || pickGenus(theme);
   const fall = typeDef(theme, g, Type.FALLER);
+  const dir = rand(2);
   return {
     active: true,
     genus: g,
     type: Type.FALLER,
     x: rand(Math.max(1, vw - fall.width)),
+    /* Fully above the screen (y + height === 0), same as xpenguins-ng. */
     y: -fall.height,
-    vx: 0,
+    /* Classic faller drifts slightly while falling. */
+    vx: dirSign(dir),
     vy: fall.speed,
-    dir: rand(2),
+    dir,
     frame: 0,
     frameAcc: 0,
     climbSide: 0,
@@ -172,23 +207,22 @@ function setType(t, type, theme, keepDir) {
   t.frame = 0;
   t.frameAcc = 0;
   const dirs = def.directions || 1;
-  if (!keepDir) t.dir = t.dir % dirs;
-  else t.dir = t.dir % dirs;
+  t.dir = ((t.dir | 0) % dirs + dirs) % dirs;
 
   if (type === Type.FALLER) {
-    t.vx = 0;
+    t.vx = dirSign(t.dir);
     t.vy = def.speed;
   } else if (type === Type.WALKER) {
     t.vy = 0;
-    t.vx = (t.dir === 0 ? 1 : -1) * def.speed;
+    t.vx = dirSign(t.dir) * def.speed;
   } else if (type === Type.TUMBLER) {
-    t.vx = (t.dir === 0 ? 1 : -1) * 0.5;
+    t.vx = dirSign(t.dir) * 0.5;
     t.vy = def.speed;
   } else if (type === Type.CLIMBER) {
     t.vx = 0;
     t.vy = -def.speed;
   } else if (type === Type.FLOATER) {
-    t.vx = (t.dir === 0 ? 1 : -1) * def.speed;
+    t.vx = dirSign(t.dir) * def.speed;
     t.vy = -def.speed * 0.25;
   } else if (type === Type.ANGEL) {
     t.vx = (Math.random() - 0.5) * 2;
@@ -196,6 +230,14 @@ function setType(t, type, theme, keepDir) {
   } else {
     t.vx = 0;
     t.vy = 0;
+  }
+  void keepDir;
+}
+
+function makeWalker(t, theme) {
+  setType(t, Type.WALKER, theme, true);
+  if (typeDef(theme, t.genus, Type.ACTION) && rand(100) === 0) {
+    setType(t, Type.ACTION, theme, true);
   }
 }
 
@@ -237,24 +279,35 @@ function stepToon(t, solids, theme, vw, vh, opts) {
     if (loop < 0 && rand(-loop) === 0) {
       setType(t, Type.WALKER, theme, true);
     }
+    /* Still need ground under feet or they tumble. */
+    const support = findSupport(solids, t.x, t.y, w, h, 5);
+    if (!support) {
+      setType(t, Type.TUMBLER, theme, true);
+    }
     return;
   }
 
-  if (t.type === Type.TUMBLER) {
-    t.vy = Math.min(
-      def.terminalVelocity || 8,
-      t.vy + (def.acceleration || 1) * 0.15,
-    );
+  /* Acceleration before integrating position. */
+  if (t.type === Type.TUMBLER || t.type === Type.FALLER) {
+    const term = def.terminalVelocity || (t.type === Type.FALLER ? 12 : 8);
+    const acc = def.acceleration != null ? def.acceleration : (t.type === Type.TUMBLER ? 1 : 0);
+    if (acc && t.vy < term) {
+      t.vy = Math.min(term, t.vy + acc * 0.25);
+    }
   } else if (t.type === Type.WALKER && def.acceleration) {
     const cap = def.terminalVelocity || 12;
-    const sign = t.dir === 0 ? 1 : -1;
-    t.vx = Math.sign(t.vx || sign) *
-      Math.min(cap, Math.abs(t.vx) + def.acceleration * 0.05);
+    const s = dirSign(t.dir);
+    const next = Math.abs(t.vx) + def.acceleration * 0.05;
+    t.vx = s * Math.min(cap, next);
   }
+
+  const prevY = t.y;
+  const prevFoot = prevY + h;
 
   t.x += t.vx;
   t.y += t.vy;
 
+  /* Soft wrap horizontally so toons re-enter from the opposite edge. */
   if (t.x < -w) t.x = vw;
   if (t.x > vw) t.x = -w;
 
@@ -263,21 +316,24 @@ function stepToon(t, solids, theme, vw, vh, opts) {
     if (ceil && t.vy < 0) {
       setType(t, Type.FALLER, theme, true);
       t.vy = Math.abs(typeDef(theme, t.genus, Type.FALLER).speed);
+      return;
     }
-    const support = findSupport(solids, t.x, t.y, w, h, 4);
-    if (support) {
-      t.y = support.y - h;
+    /*
+     * Land only when the feet cross a ledge top this frame (falling onto it).
+     * Avoids the spawn-at-y=-height false positive against solids with top≈0
+     * that glued every faller to the top of the viewport.
+     */
+    const landed = landOnLedge(solids, t.x, prevFoot, t.y + h, w, 6);
+    if (landed) {
+      t.y = landed.y - h;
       if (t.type === Type.TUMBLER && t.vy > 5 && rand(3) === 0) {
         setType(t, opts.blood === false ? Type.EXPLOSION : Type.SPLAT, theme, true);
         return;
       }
-      setType(t, Type.WALKER, theme, true);
-      if (typeDef(theme, t.genus, Type.ACTION) && rand(40) === 0) {
-        setType(t, Type.ACTION, theme, true);
-      }
-    } else if (t.y > vh + 40) {
-      Object.assign(t, createToon(vw, theme));
+      makeWalker(t, theme);
+      return;
     }
+    if (t.y > vh + 40) Object.assign(t, createToon(vw, theme));
     return;
   }
 
@@ -288,42 +344,50 @@ function stepToon(t, solids, theme, vw, vh, opts) {
       return;
     }
     t.y = support.y - h;
-    const block = blockedSide(solids, t.x, t.y, w, h, t.dir === 0 ? 1 : -1);
+    /* Probe in the direction of travel (dir 0 left → -1, dir 1 right → +1). */
+    const side = dirSign(t.dir);
+    const block = blockedSide(solids, t.x, t.y, w, h, side);
     if (block) {
-      const r = rand(5);
-      if (r === 0) setType(t, Type.FLOATER, theme, true);
-      else if (r <= 2) {
-        t.climbSide = t.dir === 0 ? 1 : -1;
+      const r = rand(8);
+      if (r < 2 && typeDef(theme, t.genus, Type.CLIMBER)) {
+        /* Climb the face we hit. */
+        t.climbSide = side;
         setType(t, Type.CLIMBER, theme, true);
-        t.x = t.dir === 0 ? block.x - w : block.x + block.w;
+        t.x = side > 0 ? block.x - w : block.x + block.w;
+      } else if (r < 3 && typeDef(theme, t.genus, Type.FLOATER)) {
+        t.dir = 1 - t.dir;
+        setType(t, Type.FLOATER, theme, true);
       } else {
         t.dir = 1 - t.dir;
-        t.vx = (t.dir === 0 ? 1 : -1) * def.speed;
+        t.vx = dirSign(t.dir) * def.speed;
       }
+      return;
     }
     const cx = t.x + w / 2;
     if (cx < support.x + 2 || cx > support.x + support.w - 2) {
       if (rand(2) === 0) setType(t, Type.TUMBLER, theme, true);
       else {
         t.dir = 1 - t.dir;
-        t.vx = (t.dir === 0 ? 1 : -1) * def.speed;
+        t.vx = dirSign(t.dir) * def.speed;
       }
     }
     return;
   }
 
   if (t.type === Type.CLIMBER) {
-    const side = t.climbSide || (t.dir === 0 ? 1 : -1);
+    const side = t.climbSide || dirSign(t.dir);
     const block = blockedSide(solids, t.x - side * 2, t.y, w, h, side);
     if (!block) {
       setType(t, Type.FALLER, theme, true);
       return;
     }
     t.x = side > 0 ? block.x - w : block.x + block.w;
+    /* Reached the top of the climbed solid → walk away from the face. */
     if (t.y + h <= block.y + 2) {
       t.y = block.y - h;
-      t.dir = side > 0 ? 0 : 1;
+      t.dir = side > 0 ? 1 : 0;
       setType(t, Type.WALKER, theme, true);
+      return;
     }
     if (t.y < -h) Object.assign(t, createToon(vw, theme));
     return;
@@ -334,7 +398,7 @@ function stepToon(t, solids, theme, vw, vh, opts) {
     const support = findSupport(solids, t.x, t.y, w, h, 3);
     if (support) {
       t.y = support.y - h;
-      setType(t, Type.WALKER, theme, true);
+      makeWalker(t, theme);
     }
   }
 }

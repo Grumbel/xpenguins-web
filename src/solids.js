@@ -70,6 +70,28 @@ export function findSupport(solids, x, y, w, h, slop = 3) {
   return best;
 }
 
+/**
+ * True landing: feet crossed a solid top this frame (prevFoot above, newFoot
+ * at/below). Prevents fallers spawned at y=-height from instantly "landing"
+ * on solids whose top is ≈0 (page headers flush with the viewport).
+ *
+ * @returns {object|null} the solid landed on (highest top that was crossed)
+ */
+export function landOnLedge(solids, x, prevFoot, newFoot, w, slop = 4) {
+  if (newFoot <= prevFoot) return null; /* not falling */
+  const cx = x + w / 2;
+  let best = null;
+  for (const s of solids) {
+    if (cx < s.x || cx > s.x + s.w) continue;
+    const top = s.y;
+    /* Feet were strictly above the ledge, then reach or pass it. */
+    if (prevFoot < top - 0.5 && newFoot >= top - slop) {
+      if (!best || top < best.y) best = s;
+    }
+  }
+  return best;
+}
+
 /** Hit a solid while falling (head or body). */
 export function hitCeiling(solids, x, y, w, h) {
   const head = y;

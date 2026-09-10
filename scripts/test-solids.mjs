@@ -53,6 +53,23 @@ assert(!findSupport([ledge], 150, 100, 30, 30, 3), 'too high above ledge');
 assert(!!blockedSide([ledge], 70, 200, 30, 30, 1), 'blocked walking into left face');
 assert(!blockedSide([ledge], 200, 180, 30, 30, 1), 'not blocked in open air');
 
+function landOnLedge(solids, x, prevFoot, newFoot, w, slop = 4) {
+  if (newFoot <= prevFoot) return null;
+  const cx = x + w / 2;
+  let best = null;
+  for (const s of solids) {
+    if (cx < s.x || cx > s.x + s.w) continue;
+    const top = s.y;
+    if (prevFoot < top - 0.5 && newFoot >= top - slop) {
+      if (!best || top < best.y) best = s;
+    }
+  }
+  return best;
+}
+assert(!!landOnLedge([ledge], 150, 195, 205, 30), 'cross ledge from above');
+assert(!landOnLedge([{x:0,y:0,w:800,h:80}], 150, 0, 3, 30), 'spawn at top does not false-land');
+assert(!landOnLedge([ledge], 150, 210, 220, 30), 'already below ledge does not land');
+
 const theme = JSON.parse(
   await import('fs').then((fs) =>
     fs.promises.readFile(new URL('../themes/penguins/theme.json', import.meta.url), 'utf8')),
