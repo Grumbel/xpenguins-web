@@ -10,8 +10,9 @@ relative to classic types (`faller`, `walker`, `climber`, …).
 
 ## Hard rules
 
-1. **Do not** check in generated `dist/` noise without rebuilding deliberately;
-   the flake / `npm run build` must be able to recreate the bundle.
+1. **Do not** check in generated bundle noise without rebuilding deliberately;
+   the flake / `npm run build` must be able to recreate
+   `dist/xpenguins-web.js` and `examples/xpenguins-web.js`.
 2. **Preserve theme geometry** when adding frames: strip layout is
    `frameIndex * width` on X, `direction * height` on Y (same as XPenguins).
 3. **Keep the public API small**: `XPenguins.start(opts)`, `stop()`,
@@ -27,23 +28,25 @@ relative to classic types (`faller`, `walker`, `climber`, …).
 - Prefer readable state machines over clever one-liners.
 - Comment non-obvious physics (why a ledge is rejected, climb vs turn).
 
-## Build
+## Build vs run
+
+Node (or Nix) is only for **building** the embeddable bundle. The demo and
+drop-in script are plain static files.
 
 ```bash
-nix build          # or: node scripts/build.mjs
+node scripts/build.mjs   # or: nix run .#build
+# → dist/xpenguins-web.js
+# → examples/xpenguins-web.js  (same bytes; demo is self-contained)
 ```
-
-Outputs `dist/xpenguins-web.js`.
 
 ## Testing
 
-Open `examples/index.html` via a local static server (file:// may block
-nothing here since assets are embedded, but a server is still fine):
-
 ```bash
-npx serve examples
-# or python -m http.server -d examples
+python3 -m http.server -d examples 8080
+# → http://127.0.0.1:8080/
 ```
+
+`file://` also works because sprites are embedded in the JS (no fetches).
 
 ## Related trees
 
